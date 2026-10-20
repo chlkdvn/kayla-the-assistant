@@ -24,6 +24,7 @@ from kayla.realtime.dictation import parse_dictation
 from kayla.realtime.echo_cancel import PulseEchoCanceller
 from kayla.realtime.events import RealtimeDisplayEvent
 from kayla.realtime.gemini_tools import gemini_tools
+from kayla.realtime.modes import DEFAULT_MODE, QUIET_MODES, parse_mode
 from kayla.realtime.options import (
     LOOK_TOOL_NAME,
     OPEN_URL_TOOL_NAME,
@@ -34,6 +35,7 @@ from kayla.realtime.options import (
     RUN_IN_TERMINAL_TOOL_NAME,
     SEE_SCREEN_TOOL_NAME,
     SET_FEELING_TOOL_NAME,
+    SET_MODE_TOOL_NAME,
     SET_VISION_TOOL_NAME,
     START_TYPE_MODE_TOOL_NAME,
     SWIPE_DESKTOP_TOOL_NAME,
@@ -132,6 +134,8 @@ class GeminiVoiceSession:
         self._type_mode = False
         self._type_mode_needs_separator = False
         self._speaking = False
+        self._mode = DEFAULT_MODE
+        self._turn_is_audio_free = True
         self._resume_handle: str | None = None
         self._bg_tasks: set[asyncio.Task[Any]] = set()
 
@@ -341,7 +345,7 @@ class GeminiVoiceSession:
         audio = message.data
         if audio:
             self._begin_model_turn()
-            if not self._type_mode:
+            if not self._type_mode and self._turn_is_audio_free:
                 self._set_speaking(True)
                 self._speaker.enqueue(
                     item_id=f"gemini-{self._turn_seq}", content_index=0, audio=audio
@@ -367,9 +371,19 @@ class GeminiVoiceSession:
         self._turn_seq += 1
         transcript = self._user_buf.strip()
         self._user_buf = ""
+        # A quiet mode still receives every turn's audio; whether she lets it out
+        # was decided when the turn started. Only a resume command reopens her
+        # mouth, so "shut up" stays truly total until "speak" is heard.
+        self._turn_is_audio_free = self._mode not in QUIET_MODES
         if transcript:
             self._emit("user_transcript", transcript)
             self._capture_memory(transcript)
+            if self._mode in QUIET_MODES:
+                new_mode = parse_mode(transcript)
+                if new_mode is not None and new_mode not in QUIET_MODES:
+                    self._mode = new_mode
+                    self._turn_is_audio_free = True
+                    self._emit("acted", f"Mode: {new_mode}")
             if self._type_mode:
                 self._spawn(self._type_user_transcript(transcript))
         if self._type_mode:
@@ -384,7 +398,7 @@ class GeminiVoiceSession:
         self._set_speaking(False)
         transcript = self._assistant_buf.strip()
         self._assistant_buf = ""
-        if transcript and not self._type_mode:
+        if transcript and not self._type_mode and self._turn_is_audio_free:
             self._emit("assistant_transcript", transcript)
 
     def _set_speaking(self, speaking: bool) -> None:
@@ -460,6 +474,8 @@ class GeminiVoiceSession:
             return await self._recall(self._arg(args, "query")), None
         if name == SET_FEELING_TOOL_NAME:
             return await self._set_feeling(self._arg(args, "feeling")), None
+        if name == SET_MODE_TOOL_NAME:
+            return self._set_mode(self._arg(args, "mode")), None
         if name == OPEN_URL_TOOL_NAME:
             return await self._open_url(self._arg(args, "url")), None
         if name == WEB_SEARCH_TOOL_NAME:
@@ -496,6 +512,18 @@ class GeminiVoiceSession:
             return f"The camera is unavailable right now ({error}).", None
         self._emit("looked", "Kayla glanced at the camera.")
         return "Captured the current camera view; it is attached as an image.", jpeg
+
+    def _set_mode(self, mode: str) -> str:
+        """Store the mode word; the session enforces quiet turns at each turn."""
+        mode = mode.strip().lower()
+        valid = {"shutup", "standby", "speak", "serious", "playful", "helpful", "work"}
+        self._mode = mode if mode in valid else "speak"
+        self._emit("acted", f"Mode: {self._mode}")
+        return (
+            "Now completely silent until they demand you speak again."
+            if self._mode in QUIET_MODES
+            else "Mode set; keep behaving that way until it changes."
+        )
 
     def _set_vision(self, enabled: str) -> str:
         """Turn the camera on or off at the user's request, releasing it when off."""

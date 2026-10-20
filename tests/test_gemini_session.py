@@ -283,3 +283,41 @@ def test_see_screen_degrades_cleanly_with_no_screen() -> None:
 
     assert image is None  # nothing attached
     assert "can't see the screen" in text.lower()  # she says so instead of crashing
+
+
+def test_quiet_mode_suppresses_audio_until_speak_is_heard() -> None:
+    face = FakeFace()
+    events: list[tuple[str, str]] = []
+    queue: list[bytes] = []
+
+    class FakeSpeaker:
+        def start(self) -> None: ...
+        def stop(self) -> None: ...
+        def enqueue(self, **kwargs: Any) -> None:
+            queue.append(kwargs["audio"])
+
+        def interrupt(self) -> None:
+            return None
+
+        def is_playing(self) -> bool:
+            return False
+
+    session = _build_session(face, lambda event: events.append((event.kind, event.text)), None)
+    session._speaker = FakeSpeaker()
+    session._mode = "shutup"
+    live = FakeLiveSession([[_user("what time is it?"), _say("It is noon."), _done()]])
+    session._session = live
+
+    with pytest.raises(_Stop):
+        asyncio.run(session._receive_events(live))
+
+    assert queue == []  # her reply was swallowed while she is quiet
+    assert not [(kind, text) for kind, text in events if kind == "assistant_transcript"]
+
+    live = FakeLiveSession([[_user("speak"), _say("Back!"), _done()]])
+    session._session = live
+    with pytest.raises(_Stop):
+        asyncio.run(session._receive_events(live))
+
+    assert queue == [b"\x00\x00"]  # audio reopened, she speaks again
+    assert session._mode == "speak"

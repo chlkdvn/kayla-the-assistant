@@ -245,6 +245,31 @@ _SET_FEELING_TOOL = {
     },
 }
 
+SET_MODE_TOOL_NAME = "set_mode"
+_SET_MODE_TOOL = {
+    "type": "function",
+    "name": SET_MODE_TOOL_NAME,
+    "description": (
+        "Change HOW you behave when the user asks for it: 'shut up'/'quiet' -> "
+        "shutup (total silence until they demand you speak), 'standby'/'wait' -> "
+        "standby (silent and idle), 'speak' -> speak (talk freely again), 'be "
+        "serious' -> serious, 'be playful' -> playful, 'be helpful' -> helpful, "
+        "'work mode'/'get to work' -> work. Call it the moment they ask; the "
+        "application enforces the quiet modes locally, so trust it for silence."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "mode": {
+                "type": "string",
+                "enum": ["shutup", "standby", "speak", "serious", "playful", "helpful", "work"],
+                "description": "The behaviour they asked for.",
+            }
+        },
+        "required": ["mode"],
+    },
+}
+
 RECALL_TOOL_NAME = "recall"
 _RECALL_TOOL = {
     "type": "function",
@@ -352,6 +377,7 @@ class RealtimeSessionOptions:
         which tools Kayla has; the Gemini provider converts them to its own format.
         """
         tools: list[dict[str, Any]] = []
+        tools.append(_SET_MODE_TOOL)
         if self.vision_enabled:
             tools.extend([_LOOK_TOOL, _SET_VISION_TOOL])
         if self.screen_enabled:
@@ -384,6 +410,20 @@ class RealtimeSessionOptions:
                     "turn_detection": self._turn_detection(
                         create_response=False,
                         interrupt_response=not enabled,
+                    )
+                }
+            },
+        }
+
+    def quiet_mode_update(self, *, live: bool) -> dict[str, Any]:
+        """Update VAD for a behaviour mode: no auto-responses while she is quiet."""
+        return {
+            "type": "realtime",
+            "audio": {
+                "input": {
+                    "turn_detection": self._turn_detection(
+                        create_response=False,
+                        interrupt_response=live,
                     )
                 }
             },

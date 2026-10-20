@@ -44,7 +44,7 @@ def test_payload_offers_the_look_tool_when_vision_is_enabled() -> None:
     assert any(tool["name"] == "look" for tool in payload["tools"])
 
 
-def test_payload_omits_tools_when_all_capabilities_are_disabled() -> None:
+def test_payload_always_includes_at_least_the_mode_tool() -> None:
     settings = Settings.from_mapping(
         {
             "OPENAI_API_KEY": "test-key",
@@ -58,7 +58,8 @@ def test_payload_omits_tools_when_all_capabilities_are_disabled() -> None:
 
     payload = options.api_payload(instructions="Be Kayla.")
 
-    assert "tools" not in payload
+    names = [tool["name"] for tool in payload["tools"]]
+    assert names == ["set_mode"]
 
 
 def test_payload_offers_browser_tools_when_enabled() -> None:

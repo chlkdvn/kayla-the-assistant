@@ -827,3 +827,42 @@ def test_realtime_session_emits_completed_transcripts() -> None:
         ("user_transcript", "Hello Kayla"),
         ("assistant_transcript", "Hello, builder!"),
     ]
+
+
+def test_set_mode_shutup_disables_automatic_responses() -> None:
+    events: list[object] = []
+    session = build_system_session(browser=FakeBrowser(), shell=FakeShell(), events=events)
+    connection, _, responses = fake_connection()
+
+    asyncio.run(session.handle_event(tool_event("set_mode", {"mode": "shutup"}), connection))
+
+    turn_detection = connection.session.updated[-1]["audio"]["input"]["turn_detection"]
+    assert turn_detection["create_response"] is False
+    assert turn_detection["interrupt_response"] is False
+    assert responses.count == 1  # she still confirms going quiet once
+    assert any(event.kind == "acted" and "shutup" in event.text for event in events)
+
+
+def test_quiet_transcripts_are_ignored_but_speak_resumes() -> None:
+    events: list[object] = []
+    session = build_system_session(browser=FakeBrowser(), shell=FakeShell(), events=events)
+    connection, items, responses = fake_connection()
+    session._mode = "shutup"
+
+    async def drive() -> None:
+        await session.handle_event(transcript_event("what is the time?"), connection)
+        await session.handle_event(transcript_event("speak"), connection)
+
+    asyncio.run(drive())
+
+    # the ordinary question produced nothing; "speak" reopened her mouth once
+    assert items.created == []
+    assert responses.count == 1
+    assert session._mode == "speak"
+
+
+def test_tone_mode_directive_is_prepended_to_each_response() -> None:
+    session = build_system_session(browser=FakeBrowser(), shell=FakeShell(), events=[])
+    session._mode = "playful"
+    text = session._instructions_with_memories([])
+    assert text.startswith("CURRENT MODE: PLAYFUL")
