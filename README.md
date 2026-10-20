@@ -4,6 +4,9 @@ Kayla is a conversational robot project. Kayla currently supports typed chat,
 inspectable push-to-talk voice, and low-latency realtime speech on a computer.
 Raspberry Pi deployment and Arduino control are the next major stages.
 
+Source history: this project originates from
+[Abmichael01/kel](https://github.com/Abmichael01/kel).
+
 ## What works now
 
 - A terminal conversation with Kayla.
