@@ -34,7 +34,6 @@ def test_answers_flow_into_the_generated_env() -> None:
             robot_name="Nova",
             wake_enabled=True,
             wake_model_path="/models/vosk",
-            body_enabled=True,
             shell_enabled=True,
             face_enabled=False,
         )
@@ -45,7 +44,6 @@ def test_answers_flow_into_the_generated_env() -> None:
     assert "OPENAI_API_KEY=o" in text
     assert "KAYLA_WAKE_ENABLED=true" in text
     assert "KAYLA_WAKE_VOSK_MODEL_PATH=/models/vosk" in text
-    assert "KAYLA_BODY_ENABLED=true" in text
     assert "KAYLA_SHELL_ENABLED=true" in text
     assert "KAYLA_FACE_ENABLED=false" in text
 
@@ -55,7 +53,6 @@ def test_defaults_are_safe_when_the_user_skips_everything() -> None:
 
     assert "KAYLA_SHELL_ENABLED=false" in text  # no surprise machine control
     assert "KAYLA_WAKE_ENABLED=false" in text  # no wake without a model
-    assert "KAYLA_BODY_ENABLED=false" in text  # no body unless detected
     assert "OPENAI_API_KEY=\n" in text  # left blank, not a placeholder key
 
 

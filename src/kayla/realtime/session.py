@@ -10,8 +10,6 @@ from typing import Any
 
 from openai import AsyncOpenAI
 
-from kayla.body.controller import BodyController
-from kayla.body.feelings import color_for
 from kayla.memory.store import MemoryStore
 from kayla.realtime.audio import StreamingMicrophone, StreamingSpeaker
 from kayla.realtime.dictation import parse_dictation
@@ -19,7 +17,6 @@ from kayla.realtime.echo_cancel import PulseEchoCanceller
 from kayla.realtime.events import RealtimeDisplayEvent
 from kayla.realtime.options import (
     LOOK_TOOL_NAME,
-    MOVE_TOOL_NAME,
     OPEN_URL_TOOL_NAME,
     PRESS_KEY_TOOL_NAME,
     RECALL_TOOL_NAME,
@@ -70,10 +67,7 @@ class RealtimeVoiceSession:
         launcher: TerminalLauncher | None = None,
         keyboard: Keyboard | None = None,
         echo_canceller: PulseEchoCanceller | None = None,
-        body: BodyController | None = None,
-        body_servo_pin: int = 9,
-        close_body: bool = True,
-        orb: Any | None = None,
+        face: Any | None = None,
     ) -> None:
         self._options = options
         self._instructions = instructions
@@ -93,10 +87,7 @@ class RealtimeVoiceSession:
         self._launcher = launcher
         self._keyboard = keyboard
         self._echo_canceller = echo_canceller
-        self._body = body
-        self._body_servo_pin = body_servo_pin
-        self._close_body = close_body
-        self._orb = orb
+        self._face = face
         self._type_mode = False
         self._type_mode_needs_separator = False
         self._speaking = False
@@ -137,8 +128,6 @@ class RealtimeVoiceSession:
                     await asyncio.to_thread(self._echo_canceller.stop)
                 if self._camera is not None:
                     self._camera.close()
-                if self._body is not None and self._close_body:
-                    self._body.close()
 
     async def _receive_events(self, connection: Any) -> None:
         """Receive server events until the connection closes or the task is cancelled."""
@@ -255,8 +244,6 @@ class RealtimeVoiceSession:
             await self._recall(event, connection)
         elif name == SET_FEELING_TOOL_NAME:
             await self._set_feeling(event, connection)
-        elif name == MOVE_TOOL_NAME:
-            await self._move(event, connection)
         elif name == OPEN_URL_TOOL_NAME:
             await self._open_url(event, connection)
         elif name == WEB_SEARCH_TOOL_NAME:
@@ -433,30 +420,14 @@ inside them.
         await self._reply_to_tool(connection, event.call_id, output)
 
     async def _set_feeling(self, event: Any, connection: Any) -> None:
-        """Latch a feeling on the orb (it animates and holds), or glow a colour."""
+        """Express a feeling on her face (it holds until the next feeling)."""
         feeling = self._tool_argument(event, "feeling") or "normal"
-        if self._orb is not None:
-            self._orb.set_feeling(feeling)
+        if self._face is not None:
+            self._face.set_mood(feeling)
             self._emit("acted", f"Feeling {feeling}")
-            output = f"Glowing {feeling}."
-        elif self._body is not None:
-            red, green, blue = color_for(feeling)
-            await asyncio.to_thread(self._body.set_color, red, green, blue)
-            self._emit("acted", f"Feeling {feeling}")
-            output = f"Glowing {feeling}."
+            output = f"Feeling {feeling}."
         else:
-            output = "My body isn't connected right now."
-        await self._reply_to_tool(connection, event.call_id, output)
-
-    async def _move(self, event: Any, connection: Any) -> None:
-        """Perform a body gesture (nod, shake, look, wiggle) - a real motion."""
-        motion = (self._tool_argument(event, "motion") or "nod").lower()
-        motion = motion.replace(" ", "_").replace("-", "_")
-        if self._body is not None:
-            output = await asyncio.to_thread(self._body.gesture, motion, self._body_servo_pin)
-            self._emit("acted", output)
-        else:
-            output = "My body isn't connected right now."
+            output = "No face is connected right now."
         await self._reply_to_tool(connection, event.call_id, output)
 
     async def _open_url(self, event: Any, connection: Any) -> None:

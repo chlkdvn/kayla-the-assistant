@@ -86,9 +86,6 @@ class Settings:
     shell_block_dangerous: bool = True
     terminal_command: str = ""
     keyboard_tool: str = ""
-    body_enabled: bool = False
-    body_port: str = ""
-    body_servo_pin: int = 9
     face_enabled: bool = False
     face_host: str = "127.0.0.1"
     face_port: int = 8765
@@ -198,9 +195,6 @@ class Settings:
         shell_timeout_text = values.get("KAYLA_SHELL_TIMEOUT_SECONDS", "20").strip()
         terminal_command = values.get("KAYLA_TERMINAL", "").strip()
         keyboard_tool = values.get("KAYLA_KEYBOARD", "").strip()
-        body_enabled = _parse_bool(values.get("KAYLA_BODY_ENABLED", "false"), "KAYLA_BODY_ENABLED")
-        body_port = values.get("KAYLA_BODY_PORT", "").strip()
-        body_servo_pin_text = values.get("KAYLA_BODY_SERVO_PIN", "9").strip()
         face_enabled = _parse_bool(values.get("KAYLA_FACE_ENABLED", "false"), "KAYLA_FACE_ENABLED")
         face_host = values.get("KAYLA_FACE_HOST", "127.0.0.1").strip() or "127.0.0.1"
         face_port_text = values.get("KAYLA_FACE_PORT", "8765").strip()
@@ -251,11 +245,6 @@ class Settings:
             raise ConfigurationError(
                 "KAYLA_KEYBOARD must be xdotool, ydotool, wtype, or empty for auto-detection."
             )
-
-        try:
-            body_servo_pin = int(body_servo_pin_text)
-        except ValueError as error:
-            raise ConfigurationError("KAYLA_BODY_SERVO_PIN must be an integer.") from error
 
         try:
             face_port = int(face_port_text)
@@ -391,9 +380,6 @@ class Settings:
             shell_block_dangerous=shell_block_dangerous,
             terminal_command=terminal_command,
             keyboard_tool=keyboard_tool,
-            body_enabled=body_enabled,
-            body_port=body_port,
-            body_servo_pin=body_servo_pin,
             face_enabled=face_enabled,
             face_host=face_host,
             face_port=face_port,

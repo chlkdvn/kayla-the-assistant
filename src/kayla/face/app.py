@@ -3,7 +3,7 @@
     uv run kayla-face --demo      # cycle moods so you can see the face
     uv run kayla-face             # wait for the brain to drive it on 127.0.0.1:8765
 
-The socket speaks the same line protocol as the Arduino body, plus a talking signal:
+The socket speaks the command protocol the brain already uses, plus a talking signal:
     mode <name>   ->  ok      speak <0|1>  ->  ok
     look <x> <y>  ->  ok      ping         ->  pong
 """

@@ -32,7 +32,7 @@ def test_gemini_provider_reads_its_own_key_model_and_voice() -> None:
 
 def test_gemini_provider_loads_without_a_key_so_other_tools_still_run() -> None:
     # The Google key is only required when the Gemini brain is actually built, so
-    # unrelated commands (memory seeding, body demos) keep working without it.
+    # unrelated commands (memory seeding, the face) keep working without it.
     settings = Settings.from_mapping(
         {"OPENAI_API_KEY": "test-key", "KAYLA_REALTIME_PROVIDER": "gemini"}
     )

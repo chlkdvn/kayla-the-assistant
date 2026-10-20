@@ -265,63 +265,20 @@ class AsyncSessionController:
             await self._run_session()
 
 
-class _GlowSessionController:
-    """Wrap the session controller so the orb wakes to 'listening' and sleeps."""
+class _FaceMoodController:
+    """Wrap the session controller so her face wakes to 'listening' and sleeps."""
 
-    def __init__(self, inner: SessionController, orb: Any) -> None:
+    def __init__(self, inner: SessionController, face: Any) -> None:
         self._inner = inner
-        self._orb = orb
+        self._face = face
 
     def start(self) -> None:
-        self._orb.set_state("listening")
+        self._face.set_mood("listening")
         self._inner.start()
 
     def stop(self) -> None:
         self._inner.stop()
-        self._orb.sleep()
-
-
-def _open_body(settings: Settings) -> Any:
-    """Open the body for the whole run (so it can glow while asleep), or None.
-
-    Prints a loud status line either way: if the body fails to open, Kayla can still
-    talk but her LED orb and LCD face will be frozen on the Arduino's power-on
-    (sleeping) look, so it must be obvious when that happens.
-    """
-    if not settings.body_enabled:
-        return None
-    from kayla.body.controller import BodyController
-    from kayla.body.serial_link import SerialLink, find_port
-
-    port = settings.body_port or find_port()
-    if not port:
-        print("Body: no Arduino serial port found — her face and orb stay off.")
-        return None
-    last_error: Exception | None = None
-    for attempt in range(2):
-        try:
-            body = BodyController(SerialLink.open(port))
-        except Exception as error:  # noqa: BLE001 - body is optional; degrade gracefully
-            last_error = error
-            if attempt == 0:
-                time.sleep(1.0)  # the port may be briefly busy right after a reset
-            continue
-        # Opening the port resets the Arduino: wait for it to boot, then confirm with
-        # a ping so we don't start firing mood commands into a rebooting board.
-        time.sleep(2.0)
-        reply = ""
-        with contextlib.suppress(Exception):
-            reply = body.ping()
-        if "pong" in reply.lower():
-            print(f"Body: connected on {port} — face + orb are LIVE.")
-        else:
-            print(f"Body: opened {port} but it hasn't answered yet; the face should catch up.")
-        return body
-    print(
-        f"Body: NOT connected ({last_error}). She'll still talk, but her face/orb will be "
-        f"frozen asleep. Check the USB cable and that {port} is accessible."
-    )
-    return None
+        self._face.set_mood("sleeping")
 
 
 def _open_face(settings: Settings) -> tuple[Any, Any]:
@@ -356,7 +313,6 @@ def _open_face(settings: Settings) -> tuple[Any, Any]:
 
 async def run_realtime_with_gate(settings: Settings, *, poll_interval: float = 0.5) -> None:
     """Run realtime mode behind the local attention gate."""
-    from kayla.body.orb import BodyOrb
     from kayla.interfaces.realtime_cli import RealtimeTerminalDisplay
     from kayla.realtime.app import build_realtime_session
 
@@ -367,38 +323,36 @@ async def run_realtime_with_gate(settings: Settings, *, poll_interval: float = 0
     announcer.prepare()
     background_announcer = _BackgroundAnnouncer(announcer, loop)
 
-    # The body is opened once for the whole run so the orb can animate even while
-    # asleep. The orb continuously flows each mood's palette of colours.
-    body = _open_body(settings)
     face, face_proc = _open_face(settings)
-    orb = BodyOrb(body, face=face)
-    orb.start()  # begins animating "sleeping" (a slow red breath)
 
     def on_event(event: Any) -> None:
         display.show(event)
         kind = event.kind
         if kind == "speech_started":
             gate.note_user_speech()
-            orb.set_state("listening")
-        elif kind == "speech_stopped":
-            orb.set_state("thinking")
-        elif kind == "type_mode":
-            orb.set_state("typing")
-        elif kind == "assistant_transcript":
-            orb.set_state("listening")
+            if face is not None:
+                face.set_mood("listening")
+        elif kind == "speech_stopped" and face is not None:
+            face.set_mood("thinking")
+        elif kind == "type_mode" and face is not None:
+            face.set_mood("typing")
+        elif kind == "assistant_transcript" and face is not None:
+            face.set_mood("listening")
         elif kind == "assistant_speaking" and face is not None:
             face.set_speaking(True)
         elif kind == "assistant_done" and face is not None:
             face.set_speaking(False)
 
     async def run_session() -> None:
-        session = build_realtime_session(settings, on_event=on_event, body=body, orb=orb)
+        session = build_realtime_session(settings, on_event=on_event, face=face)
         await session.run()
 
     controller = AsyncSessionController(run_session=run_session)
-    glow_controller = _GlowSessionController(controller, orb)
+    mood_controller: SessionController = controller
+    if face is not None:
+        mood_controller = _FaceMoodController(controller, face)
     gate = build_attention_gate(
-        settings, announcer=background_announcer, session_controller=glow_controller
+        settings, announcer=background_announcer, session_controller=mood_controller
     )
     detector = build_detector(
         settings,
@@ -419,12 +373,8 @@ async def run_realtime_with_gate(settings: Settings, *, poll_interval: float = 0
     finally:
         controller.stop()
         detector.stop()
-        orb.stop()
         if face is not None:
             face.close()
         if face_proc is not None:
             with contextlib.suppress(Exception):
                 face_proc.terminate()
-        if body is not None:
-            with contextlib.suppress(Exception):
-                body.close()

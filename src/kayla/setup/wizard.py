@@ -23,8 +23,6 @@ class Answers:
     wake_enabled: bool = False
     wake_model_path: str = ""
     screen_enabled: bool = False
-    body_enabled: bool = False
-    body_port: str = ""
     shell_enabled: bool = False
     face_enabled: bool = True
 
@@ -92,11 +90,6 @@ def build_env_text(a: Answers) -> str:
         "KAYLA_SHELL_BLOCK_DANGEROUS=true",
         "KAYLA_KEYBOARD=wtype",
         "",
-        "# Robot body (Arduino over USB; blank port = auto-detect).",
-        f"KAYLA_BODY_ENABLED={_b(a.body_enabled)}",
-        f"KAYLA_BODY_PORT={a.body_port}",
-        "KAYLA_BODY_SERVO_PIN=9",
-        "",
         "# OpenAI-only extras (text chat + push-to-talk); ignored on a Gemini setup.",
         "KAYLA_OPENAI_MODEL=gpt-5.4-mini",
         "KAYLA_EMBEDDING_MODEL=text-embedding-3-small",
@@ -113,7 +106,6 @@ def summary(a: Answers) -> list[str]:
         f"Memory:  {on if a.openai_api_key else off + ' (add an OpenAI key later to enable)'}",
         f"Wake:    {on if a.wake_enabled else off}",
         f"Screen:  {on if a.screen_enabled else off}",
-        f"Body:    {on if a.body_enabled else off}",
         f"Face:    {on if a.face_enabled else off}",
         f"Control: browser on, shell {on if a.shell_enabled else off}",
     ]

@@ -1,8 +1,8 @@
 # Kayla
 
-Kayla is a conversational robot project. Kayla currently supports typed chat,
-inspectable push-to-talk voice, and low-latency realtime speech on a computer.
-Raspberry Pi deployment and Arduino control are the next major stages.
+Kayla is a conversational assistant project, built as a rival to JARVIS. Kayla
+currently supports typed chat, inspectable push-to-talk voice, and low-latency
+realtime speech on a computer, with a camera, screen vision, and an animated face.
 
 Source history: this project originates from
 [Abmichael01/kel](https://github.com/Abmichael01/kel).
@@ -34,15 +34,15 @@ Python 3.13 for the project.
 
 ## First-time setup
 
-1. Install the project. `voice` is her brain/audio, `face` is the on-screen face,
-   `robot` is the Arduino body (add `dev` if you'll run the tests):
+1. Install the project. `voice` is her brain/audio, `face` is the on-screen face
+   (add `dev` if you'll run the tests):
 
    ```bash
-   uv sync --extra voice --extra face --extra robot
+   uv sync --extra voice --extra face
    ```
 
 2. Run the setup wizard. It asks for your (free) Gemini key, picks your audio,
-   can download the wake model, detects an Arduino, and writes your `.env`:
+   can download the wake model and writes your `.env`:
 
    ```bash
    uv run kayla-setup
@@ -63,8 +63,7 @@ Python 3.13 for the project.
 
 ## Sharing Kayla with someone
 
-She's built to run on a fresh machine gracefully: with no Arduino she still
-talks (the body is optional), with no camera she just can't see, and with no
+She's built to run on a fresh machine gracefully: with no camera she just can't see, and with no
 OpenAI key she runs on Gemini alone (long-term memory turns off until a key is
 added). Hand a friend the repo, have them run `uv run kayla-setup`, and she's
 ready. The wizard defaults to safe settings — computer/shell control is **off**
@@ -177,5 +176,4 @@ uv run ruff check .
 uv run ruff format --check .
 ```
 
-See [the architecture guide](docs/architecture.md) for the full design and the
-planned Arduino communication flow.
+See [the architecture guide](docs/architecture.md) for the full design and the.

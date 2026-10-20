@@ -2,9 +2,9 @@
 
 ## Product intent
 
-Kayla is a conversational robot. During the first phase, Kayla runs on a computer as
-a text and voice assistant. Later, the same Python application will run on a
-Raspberry Pi and exchange safe, structured commands with an Arduino.
+Kayla is a conversational assistant and software rival to JARVIS. During the first
+phase, Kayla runs on a computer as a text-and-voice assistant with vision, computer
+control, and an animated on-screen face.
 
 ## Working agreement with the owner
 
@@ -30,22 +30,6 @@ Raspberry Pi and exchange safe, structured commands with an Arduino.
 - `voice/`: microphone and speaker concerns when voice is introduced.
 - `realtime/`: continuous PCM streaming, Realtime API state, and interruption
   handling. Keep it independent from the chained `voice/` fallback.
-- `hardware/`: validated robot commands and Arduino transport when hardware is
-  introduced.
-
-Do not make conversation logic import the terminal UI. Do not make domain logic
-depend directly on Arduino, audio, or OpenAI SDK details. Wire implementations
-together at the application boundary.
-
-## Robot safety rules
-
-- Never send arbitrary model-generated text directly to motors or actuators.
-- Convert requested actions to a small allowlisted command schema, validate
-  limits, and require hardware acknowledgements.
-- Physical motion must eventually have timeouts, an emergency stop, and a safe
-  default state when communication is lost.
-- Kayla must not claim a physical action happened until the hardware confirms it.
-
 ## Secrets
 
 - Never commit `.env` or an API key.

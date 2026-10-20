@@ -73,24 +73,6 @@ def _download_wake_model(models_dir: Path) -> str | None:
     return None
 
 
-def _detect_body() -> tuple[bool, str]:
-    """Auto-detect an Arduino and offer to turn the body on."""
-    try:
-        from kayla.body.serial_link import find_port
-
-        port = find_port()
-    except Exception:  # noqa: BLE001 - detection is optional
-        port = None
-    if not port:
-        print(
-            "\nNo Arduino detected — that's fine, she runs without a body. (You can wire it later.)"
-        )
-        return False, ""
-    if _ask_yes_no(f"\nFound a board at {port} — turn on her body?", True):
-        return True, ""  # blank port = auto-detect at runtime too
-    return False, ""
-
-
 def _write_env(project_root: Path, text: str) -> bool:
     """Write .env, refusing to silently clobber an existing one."""
     env_path = project_root / ".env"
@@ -127,8 +109,6 @@ def main() -> None:
         "\nLet Kayla see your screen? (a see_screen tool; needs grim on Wayland)", False
     )
 
-    body_enabled, body_port = _detect_body()
-
     print("\nComputer control lets Kayla run terminal commands on THIS machine.")
     shell_enabled = _ask_yes_no("Enable it? (leave off unless you trust this setup)", False)
 
@@ -143,8 +123,6 @@ def main() -> None:
         wake_enabled=wake_enabled,
         wake_model_path=wake_path,
         screen_enabled=screen_enabled,
-        body_enabled=body_enabled,
-        body_port=body_port,
         shell_enabled=shell_enabled,
         face_enabled=face_enabled,
     )

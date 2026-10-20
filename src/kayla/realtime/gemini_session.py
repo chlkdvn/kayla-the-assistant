@@ -1,9 +1,9 @@
 """Gemini Live speech-to-speech orchestration, mirroring the OpenAI session.
 
 This speaks to Google's Gemini Live API instead of OpenAI's Realtime API, but it
-reuses every other part of Kayla: the same microphone/speaker, camera, memory, body,
-orb, browser, shell and keyboard, the same tool set, and the same display events -
-so the wake gate, the glowing orb and the LCD face behave identically.
+reuses every other part of Kayla: the same microphone/speaker, camera, memory,
+face, browser, shell and keyboard, the same tool set, and the same display events -
+so the wake gate and the on-screen face behave identically.
 """
 
 from __future__ import annotations
@@ -18,8 +18,6 @@ from typing import Any
 from google import genai
 from google.genai import types
 
-from kayla.body.controller import BodyController
-from kayla.body.feelings import color_for
 from kayla.memory.store import MemoryStore
 from kayla.realtime.audio import StreamingMicrophone, StreamingSpeaker
 from kayla.realtime.dictation import parse_dictation
@@ -28,7 +26,6 @@ from kayla.realtime.events import RealtimeDisplayEvent
 from kayla.realtime.gemini_tools import gemini_tools
 from kayla.realtime.options import (
     LOOK_TOOL_NAME,
-    MOVE_TOOL_NAME,
     OPEN_URL_TOOL_NAME,
     PRESS_KEY_TOOL_NAME,
     RECALL_TOOL_NAME,
@@ -94,10 +91,7 @@ class GeminiVoiceSession:
         launcher: TerminalLauncher | None = None,
         keyboard: Keyboard | None = None,
         echo_canceller: PulseEchoCanceller | None = None,
-        body: BodyController | None = None,
-        body_servo_pin: int = 9,
-        close_body: bool = True,
-        orb: Any | None = None,
+        face: Any | None = None,
     ) -> None:
         self._api_key = api_key
         self._model = model
@@ -129,10 +123,7 @@ class GeminiVoiceSession:
         self._launcher = launcher
         self._keyboard = keyboard
         self._echo_canceller = echo_canceller
-        self._body = body
-        self._body_servo_pin = body_servo_pin
-        self._close_body = close_body
-        self._orb = orb
+        self._face = face
         self._session: Any | None = None
         self._user_buf = ""
         self._assistant_buf = ""
@@ -208,8 +199,6 @@ class GeminiVoiceSession:
                 await asyncio.to_thread(self._echo_canceller.stop)
             if self._camera is not None:
                 self._camera.close()
-            if self._body is not None and self._close_body:
-                self._body.close()
 
     async def _converse(self, client: Any) -> None:
         """Keep a Live session running, transparently reconnecting on a dropped link.
@@ -236,8 +225,6 @@ class GeminiVoiceSession:
                         else "Reconnected — keep going.",
                     )
                     first = False
-                    if self._orb is not None:
-                        self._orb.set_state("listening")
                     async with asyncio.TaskGroup() as tasks:
                         tasks.create_task(self._send_microphone(session))
                         tasks.create_task(self._receive_events(session))
@@ -473,8 +460,6 @@ class GeminiVoiceSession:
             return await self._recall(self._arg(args, "query")), None
         if name == SET_FEELING_TOOL_NAME:
             return await self._set_feeling(self._arg(args, "feeling")), None
-        if name == MOVE_TOOL_NAME:
-            return await self._move(self._arg(args, "motion")), None
         if name == OPEN_URL_TOOL_NAME:
             return await self._open_url(self._arg(args, "url")), None
         if name == WEB_SEARCH_TOOL_NAME:
@@ -556,29 +541,11 @@ class GeminiVoiceSession:
 
     async def _set_feeling(self, feeling: str) -> str:
         feeling = feeling or "normal"
-        if self._orb is not None:
-            self._orb.set_feeling(feeling)
+        if self._face is not None:
+            self._face.set_mood(feeling)
             self._emit("acted", f"Feeling {feeling}")
-            return f"Glowing {feeling}."
-        if self._body is not None:
-            red, green, blue = color_for(feeling)
-            await asyncio.to_thread(self._body.set_color, red, green, blue)
-            self._emit("acted", f"Feeling {feeling}")
-            return f"Glowing {feeling}."
-        return "My body isn't connected right now."
-
-    async def _move(self, motion: str) -> str:
-        motion = (motion or "nod").lower().replace(" ", "_").replace("-", "_")
-        if self._body is not None:
-            # A deliberate one-off gesture (nod/shake/glance). Fire it in the background so it
-            # never blocks her speech, and keep the reply terse and stage-direction-style so she
-            # doesn't read it aloud - the prompt also tells her never to announce movements. Her
-            # everyday liveliness is separate: the Arduino carries her head by her current mood.
-            pretty = motion.replace("_", " ")
-            self._spawn(asyncio.to_thread(self._body.gesture, motion, self._body_servo_pin))
-            self._emit("acted", f"Moving: {pretty}")
-            return f"(did {pretty})"
-        return "My body isn't connected right now."
+            return f"Feeling {feeling}."
+        return "No face is connected right now."
 
     async def _open_url(self, url: str) -> str:
         if self._browser is not None and url:

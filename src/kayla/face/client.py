@@ -1,9 +1,8 @@
 """Drive Kayla's desktop face window over its local socket.
 
-Sends the same ``mode <name>`` commands the Arduino body understands, plus a
-``speak <0|1>`` lip-sync signal. All sending happens on a background thread and
-never blocks the caller; if the face window isn't running, commands are simply
-dropped and it reconnects when it comes back.
+Sends her ``mode <name>`` mood command, plus a ``speak <0|1>`` lip-sync signal.
+All sending happens on a background thread and never blocks the caller; if the face
+window isn't running, commands are simply dropped and it reconnects when it comes back.
 """
 
 from __future__ import annotations

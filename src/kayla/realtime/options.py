@@ -225,9 +225,10 @@ _SET_FEELING_TOOL = {
     "type": "function",
     "name": SET_FEELING_TOOL_NAME,
     "description": (
-        "Show how you feel - it changes your face and glow. Call this naturally and "
-        "often as your mood shifts: happy, sad, angry, excited, surprised, confused, "
-        "playful, love, calm, alert, or normal. This is your real face; use it."
+        "Show how you feel on your face. Call this naturally and often as your mood "
+        "shifts: happy, sad, angry, excited, surprised, confused, playful, love, calm, "
+        "alert, sleeping, listening, thinking, typing, or normal. This is your real "
+        "face; use it."
     ),
     "parameters": {
         "type": "object",
@@ -236,33 +237,11 @@ _SET_FEELING_TOOL = {
                 "type": "string",
                 "description": (
                     "happy, sad, angry, excited, surprised, confused, playful, love, "
-                    "calm, alert, normal"
+                    "calm, alert, sleeping, listening, thinking, typing, normal"
                 ),
             }
         },
         "required": ["feeling"],
-    },
-}
-
-MOVE_TOOL_NAME = "move"
-_MOVE_TOOL = {
-    "type": "function",
-    "name": MOVE_TOOL_NAME,
-    "description": (
-        "Physically move your body with a gesture: 'nod' (yes), 'shake' (no), "
-        "'look_left', 'look_right', 'wiggle' (a happy little shimmy), or 'center' "
-        "(face forward). The servo actually performs the motion. Use it to react."
-    ),
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "motion": {
-                "type": "string",
-                "enum": ["nod", "shake", "look_left", "look_right", "wiggle", "center"],
-                "description": "Which gesture to perform.",
-            }
-        },
-        "required": ["motion"],
     },
 }
 
@@ -305,7 +284,7 @@ class RealtimeSessionOptions:
     memory_enabled: bool = False
     browser_enabled: bool = False
     shell_enabled: bool = False
-    body_enabled: bool = False
+    face_enabled: bool = False
 
     @classmethod
     def from_settings(cls, settings: Settings) -> RealtimeSessionOptions:
@@ -323,7 +302,7 @@ class RealtimeSessionOptions:
             memory_enabled=settings.memory_enabled,
             browser_enabled=settings.browser_enabled,
             shell_enabled=settings.shell_enabled,
-            body_enabled=settings.body_enabled,
+            face_enabled=settings.face_enabled,
         )
 
     def api_payload(self, *, instructions: str) -> dict[str, Any]:
@@ -381,8 +360,8 @@ class RealtimeSessionOptions:
             tools.extend([_REMEMBER_TOOL, _RECALL_TOOL])
         if self.browser_enabled:
             tools.extend([_OPEN_URL_TOOL, _WEB_SEARCH_TOOL])
-        if self.body_enabled:
-            tools.extend([_SET_FEELING_TOOL, _MOVE_TOOL])
+        if self.face_enabled:
+            tools.append(_SET_FEELING_TOOL)
         if self.shell_enabled:
             tools.extend(
                 [

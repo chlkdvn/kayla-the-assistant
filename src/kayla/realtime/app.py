@@ -20,15 +20,9 @@ def build_realtime_session(
     settings: Settings,
     *,
     on_event: Callable[[RealtimeDisplayEvent], None],
-    body: object | None = None,
-    orb: object | None = None,
+    face: object | None = None,
 ) -> RealtimeVoiceSession | GeminiVoiceSession:
-    """Create live audio I/O and the persistent Realtime API session.
-
-    If ``body`` is supplied (the wake orchestrator owns one for the whole run so it
-    can glow while asleep), this session uses it and does NOT close it. Otherwise,
-    when the body is enabled, this session opens and owns its own.
-    """
+    """Create live audio I/O and the persistent Realtime API session."""
     options = RealtimeSessionOptions.from_settings(settings)
     provider = settings.realtime_provider
     if provider == "gemini":
@@ -107,18 +101,6 @@ def build_realtime_session(
         from kayla.realtime.echo_cancel import PulseEchoCanceller
 
         echo_canceller = PulseEchoCanceller()
-    close_body = False
-    if body is None and settings.body_enabled:
-        from kayla.body.controller import BodyController
-        from kayla.body.serial_link import SerialLink, find_port
-
-        port = settings.body_port or find_port()
-        if port:
-            try:
-                body = BodyController(SerialLink.open(port))
-                close_body = True
-            except Exception as error:  # noqa: BLE001 - body is optional; degrade gracefully
-                print(f"Body not connected ({error}); continuing without it.")
     from kayla.system.environment import describe_environment
 
     shared: dict[str, object | None] = dict(
@@ -139,10 +121,7 @@ def build_realtime_session(
         launcher=launcher,
         keyboard=keyboard,
         echo_canceller=echo_canceller,
-        body=body,
-        body_servo_pin=settings.body_servo_pin,
-        close_body=close_body,
-        orb=orb,
+        face=face,
     )
     if provider == "gemini":
         if not settings.gemini_api_key:

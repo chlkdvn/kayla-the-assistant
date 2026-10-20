@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
-import threading
 from types import SimpleNamespace as NS
 from typing import Any
 
@@ -36,30 +35,12 @@ class FakeSpeaker:
         return False
 
 
-class FakeOrb:
+class FakeFace:
     def __init__(self) -> None:
         self.feelings: list[str] = []
 
-    def set_feeling(self, feeling: str) -> None:
+    def set_mood(self, feeling: str) -> None:
         self.feelings.append(feeling)
-
-    def set_state(self, _state: str) -> None: ...
-
-
-class FakeBody:
-    """A body whose gesture blocks until released, so a test can prove _move
-    returns (letting Kayla speak) before the servo motion has finished."""
-
-    def __init__(self) -> None:
-        self.calls: list[tuple[str, int]] = []
-        self.finished = False
-        self.release = threading.Event()
-
-    def gesture(self, name: str, pin: int) -> str:
-        self.release.wait(timeout=2.0)
-        self.calls.append((name, pin))
-        self.finished = True
-        return f"Did a {name}."
 
 
 class FakeLiveSession:
@@ -141,9 +122,9 @@ def _done() -> Any:
 
 
 def _build_session(
-    orb: FakeOrb, on_event: Any, camera: Any = None, body: Any = None, screen: Any = None
+    face: FakeFace, on_event: Any, camera: Any = None, screen: Any = None
 ) -> GeminiVoiceSession:
-    settings = Settings.from_mapping({"OPENAI_API_KEY": "x", "KAYLA_BODY_ENABLED": "true"})
+    settings = Settings.from_mapping({"OPENAI_API_KEY": "x"})
     options = RealtimeSessionOptions.from_settings(settings)
     return GeminiVoiceSession(
         api_key="x",
@@ -156,15 +137,14 @@ def _build_session(
         on_event=on_event,
         camera=camera,
         screen=screen,
-        orb=orb,
-        body=body,
+        face=face,
     )
 
 
 def test_receive_loop_processes_every_turn_not_just_the_first() -> None:
-    orb = FakeOrb()
+    face = FakeFace()
     events: list[tuple[str, str]] = []
-    session = _build_session(orb, lambda event: events.append((event.kind, event.text)))
+    session = _build_session(face, lambda event: events.append((event.kind, event.text)))
     turn_one = [
         _user("I feel sad"),
         _tool("set_feeling", {"feeling": "sad"}),
@@ -185,7 +165,7 @@ def test_receive_loop_processes_every_turn_not_just_the_first() -> None:
 
     transcripts = [text for kind, text in events if kind == "assistant_transcript"]
     assert transcripts == ["I'm here.", "Anytime!"]  # both turns handled, not just the first
-    assert orb.feelings == ["sad", "happy"]
+    assert face.feelings == ["sad", "happy"]
     assert len(live.tool_responses) == 2
 
 
@@ -196,8 +176,8 @@ def test_look_attaches_the_image_inside_the_tool_response_payload() -> None:
 
         def close(self) -> None: ...
 
-    orb = FakeOrb()
-    session = _build_session(orb, lambda event: None, camera=FakeCamera())
+    face = FakeFace()
+    session = _build_session(face, lambda event: None, camera=FakeCamera())
     live = FakeLiveSession([[_tool("look", {}), _say("I see a mug."), _done()]])
     session._session = live
 
@@ -216,8 +196,8 @@ def test_look_attaches_the_image_inside_the_tool_response_payload() -> None:
 
 
 def test_text_only_tool_results_use_the_normal_send_path() -> None:
-    orb = FakeOrb()
-    session = _build_session(orb, lambda event: None)
+    face = FakeFace()
+    session = _build_session(face, lambda event: None)
     live = FakeLiveSession([[_tool("set_feeling", {"feeling": "happy"}), _say("Yay!"), _done()]])
     session._session = live
 
@@ -234,8 +214,8 @@ def test_mic_stays_muted_while_speaking_even_after_the_buffer_drains() -> None:
     # and is_playing() reads False. If we only muted on is_playing(), the mic would unmute
     # mid-word, feed her own echo back in, and Gemini would cut her off. `_speaking` keeps
     # the mic muted across those gaps.
-    orb = FakeOrb()
-    session = _build_session(orb, lambda event: None)
+    face = FakeFace()
+    session = _build_session(face, lambda event: None)
     session._speaking = True  # mid-sentence; FakeSpeaker.is_playing() returns False
 
     class Mic:
@@ -265,9 +245,9 @@ def test_mic_stays_muted_while_speaking_even_after_the_buffer_drains() -> None:
 
 
 def test_one_bad_message_does_not_end_the_conversation() -> None:
-    orb = FakeOrb()
+    face = FakeFace()
     events: list[tuple[str, str]] = []
-    session = _build_session(orb, lambda event: events.append((event.kind, event.text)))
+    session = _build_session(face, lambda event: events.append((event.kind, event.text)))
     broken = NS()  # missing attributes -> raises inside _handle_message
     live = FakeLiveSession([[broken, _user("hi"), _say("Hello!"), _done()]])
     session._session = live
@@ -288,7 +268,7 @@ class _FakeScreen:
 
 
 def test_see_screen_attaches_a_screenshot_when_a_screen_is_present() -> None:
-    session = _build_session(FakeOrb(), lambda _event: None, screen=_FakeScreen(b"IMG"))
+    session = _build_session(FakeFace(), lambda _event: None, screen=_FakeScreen(b"IMG"))
 
     text, image = asyncio.run(session._see_screen())
 
@@ -297,35 +277,9 @@ def test_see_screen_attaches_a_screenshot_when_a_screen_is_present() -> None:
 
 
 def test_see_screen_degrades_cleanly_with_no_screen() -> None:
-    session = _build_session(FakeOrb(), lambda _event: None)  # no screen configured
+    session = _build_session(FakeFace(), lambda _event: None)  # no screen configured
 
     text, image = asyncio.run(session._see_screen())
 
     assert image is None  # nothing attached
     assert "can't see the screen" in text.lower()  # she says so instead of crashing
-
-
-def test_move_lets_kayla_speak_while_the_servo_is_still_moving() -> None:
-    """The move tool must not block on the gesture; motion runs in the background so
-    it overlaps speech instead of finishing before she says a word."""
-    orb = FakeOrb()
-    body = FakeBody()
-    session = _build_session(orb, lambda _event: None, body=body)
-
-    async def scenario() -> None:
-        summary = await session._move("nod")
-        # _move returned even though the gesture is still blocked (release not set),
-        # so Kayla is free to start talking while the servo keeps moving.
-        assert body.finished is False
-        assert "nod" in summary.lower()
-
-        # Let the background gesture finish and confirm it actually ran with our args.
-        body.release.set()
-        for _ in range(200):
-            if body.finished:
-                break
-            await asyncio.sleep(0.005)
-        assert body.finished is True
-        assert body.calls == [("nod", 9)]
-
-    asyncio.run(scenario())

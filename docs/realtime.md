@@ -159,5 +159,3 @@ heard.
   starting each normal response, adding a little latency for reliable recall.
 - Sessions have a platform duration limit. Restart the command if a long-running
   development session closes.
-- Arduino tools are not connected yet. Realtime function calls will eventually
-  enter the same validated command layer planned for hardware safety.

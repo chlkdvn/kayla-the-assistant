@@ -12,8 +12,8 @@ def _all_tools_options() -> RealtimeSessionOptions:
             "KAYLA_VISION_ENABLED": "true",
             "KAYLA_MEMORY_ENABLED": "true",
             "KAYLA_BROWSER_ENABLED": "true",
-            "KAYLA_BODY_ENABLED": "true",
             "KAYLA_SHELL_ENABLED": "true",
+            "KAYLA_FACE_ENABLED": "true",
         }
     )
     return RealtimeSessionOptions.from_settings(settings)
@@ -30,7 +30,7 @@ def test_every_enabled_tool_becomes_one_declaration() -> None:
     names = {declaration.name for declaration in declarations}
 
     assert len(declarations) == len(specs)
-    assert {"look", "remember", "recall", "set_feeling", "move"} <= names
+    assert {"look", "remember", "recall", "set_feeling"} <= names
     assert {"run_command", "type_text", "press_key", "swipe_desktop"} <= names
 
 

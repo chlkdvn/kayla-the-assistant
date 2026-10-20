@@ -2,33 +2,20 @@
 
 ## The main idea
 
-The robot is split into two layers:
+Kayla is a software assistant running on one computer:
 
 ```text
 Human
   |
   v
-Computer or Raspberry Pi
+Computer
   microphone -> Python -> AI -> Python -> speaker
-                         |
-                         v
-                  validated command
-                         |
-                         v
-                      Arduino
-                motors, LEDs, sensors
-```
-
-Python is the brain and Arduino is the body controller. The Arduino does not run
-the language model. It performs small deterministic actions and reports sensor
-data. This keeps the system easier to understand and much safer.
-
-## Why Python
-
-Python works on both the development computer and Raspberry Pi. It has mature
-libraries for OpenAI, audio, serial communication, cameras, and robotics. The
-Arduino will use its normal C++-based sketch language because it is designed for
-precise hardware control.
+                           |
+                           v
+                    validated action
+                           |
+                           v
+            browser, terminal, keyboard, camera
 
 ## Current request flow
 
@@ -48,7 +35,7 @@ The return journey carries two values:
 - `response_id`: the identifier used to continue the same conversation.
 
 `ConversationSession` remembers only that identifier. It does not know anything
-about HTTP, OpenAI SDK objects, microphones, or Arduino ports.
+about HTTP, OpenAI SDK objects, or microphones.
 
 ## Responsibilities
 
@@ -163,33 +150,18 @@ not played. The session reports how many milliseconds were actually heard and
 truncates the assistant conversation item at that position. This prevents future
 responses from assuming the user heard words that were interrupted.
 
-## Planned Arduino boundary
+## Milestones
 
-Python and Arduino will communicate over USB serial. They will exchange newline-
-delimited JSON rather than unstructured sentences. A future command may look
-like this:
-
-```json
-{"command":"turn_head","angle_degrees":20,"request_id":"abc123"}
-```
-
-Arduino will validate supported commands and limits, execute the action, then
-return an acknowledgement:
-
-```json
-{"request_id":"abc123","status":"completed"}
-```
-
-The AI will never write directly to pins or invent raw motor values. A hardware
-service will translate allowlisted actions, clamp safe limits, enforce timeouts,
-and stop motion if communication is lost.
+1. Text chat on the computer. **Complete.**
+2. Push-to-talk microphone and speaker flow. **Complete.**
+3. Natural realtime voice conversation. **Complete.**
+4. Wake-word attention gate and on-screen face. **Complete.**
+5. Raspberry Pi deployment.
 
 ## Milestones
 
 1. Text chat on the computer. **Complete.**
 2. Push-to-talk microphone and speaker flow. **Complete.**
 3. Natural realtime voice conversation. **Complete.**
-4. Simulated allowlisted robot actions.
-5. USB serial connection to an Arduino.
-6. Sensors, servos, motors, and emergency-stop behavior.
-7. Move the Python brain from the computer to Raspberry Pi.
+4. Wake-word attention gate and on-screen face. **Complete.**
+5. Raspberry Pi deployment.

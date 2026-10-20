@@ -27,20 +27,14 @@ voice = [
     "sounddevice>=0.5,<1",
     "vosk>=0.3,<1",
 ]
-robot = [
-    "pyserial>=3,<4",
-]
 face = [
     "pygame-ce>=2.4,<3",
 ]
-
 [project.scripts]
 kayla = "kayla.interfaces.cli:main"
 kayla-setup = "kayla.setup.cli:main"
 kayla-realtime = "kayla.interfaces.realtime_cli:main"
 kayla-voice = "kayla.interfaces.voice_cli:main"
-kayla-blink = "kayla.body.blink_test:main"
-kayla-body = "kayla.body.body_cli:main"
 kayla-face = "kayla.face.app:main"
 kayla-seed-memory = "kayla.memory.seed_memories:main"
 
