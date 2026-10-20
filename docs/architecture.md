@@ -145,6 +145,15 @@ the completed transcript, retrieves relevant vector memories, supplies them as
 per-response instructions, then creates the response. Output audio is played as
 chunks arrive rather than waiting for a complete file.
 
+### Behaviour modes
+
+Spoken commands ('shut up', 'standby', 'speak', 'be serious', 'be playful', 'be
+helpful', 'work') map to a `set_mode` tool in `realtime/modes.py`. The quiet modes
+are enforced locally on both providers: the OpenAI session turns off automatic
+model responses, and the Gemini session swallows each muted turn's audio at the
+session boundary - so no words escape until a resume word is heard. Tone modes
+inject a CURRENT MODE directive into each response's instructions.
+
 When a user speaks during Kayla's answer, the local buffer discards audio that was
 not played. The session reports how many milliseconds were actually heard and
 truncates the assistant conversation item at that position. This prevents future
