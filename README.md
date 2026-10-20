@@ -107,6 +107,30 @@ uv run python -m sounddevice
 Set `KAYLA_AUDIO_INPUT_DEVICE` or `KAYLA_AUDIO_OUTPUT_DEVICE` in `.env` to a device
 name or number from that list. Leave them blank to use the system defaults.
 
+## Voice instructions
+
+While talking to Kayla in realtime voice mode, these exact words switch how she
+behaves:
+
+| You say | What changes |
+| --- | --- |
+| "shut up" / "be quiet" / "shush" | Total silence. Even questions get no answer — only a resume command below gets through. |
+| "standby" / "wait" / "stand by" | Same hard silence; she stays idle at attention. |
+| "speak" / "talk to me" | Back to normal conversation. |
+| "be serious" | No jokes; precise, direct, focused. |
+| "be playful" | Jokes, teasing, playful energy. |
+| "be helpful" | Assistant-first: anticipates your next step, finishes the task. |
+| "work" / "get to work" / "focus" | Strictly task-focused, minimal chatter. |
+
+Helpful details:
+
+- Quotes are just examples — the words work as bare commands too ("Kayla, shut up!").
+- While quiet, only the command words pass through; ordinary sentences do nothing.
+- These commands are separate from the wake word: say `"Kayla, pay attention"`
+  first if she is asleep (`KAYLA_WAKE_PHRASES_SLEEP=at ease` puts her back to bed).
+- Her feelings (face moods) respond to conversation as before; voice instructions
+  only change how she talks and listens.
+
 ## What happens when you send a message
 
 1. `interfaces/cli.py` reads text from the terminal.
