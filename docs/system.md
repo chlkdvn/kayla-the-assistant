@@ -405,4 +405,4 @@ with `KAYLA_SHELL_BLOCK_DANGEROUS=false`.
 - `realtime/dictation.py` — parses type-mode text, Enter, and exit phrases.
 - `system/launcher.py` — `TerminalLauncher`: detached commands in a new terminal.
 - `system/shell.py` — `ShellRunner.run` + `is_dangerous` tripwire.
-- Tools wired in `realtime/options.py`; handlers in `realtime/session.py`.
+- Tools wired in `realtime/options.py`; handlers in `realtime/gemini_session.py`.

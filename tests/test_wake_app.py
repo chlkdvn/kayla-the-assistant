@@ -20,7 +20,7 @@ from kayla.wake.vosk_detector import VoskWakeWordDetector
 
 
 def make_settings(**overrides: str) -> Settings:
-    values = {"OPENAI_API_KEY": "test-key"}
+    values = {"GROQ_API_KEY": "test-key"}
     values.update(overrides)
     return Settings.from_mapping(values)
 

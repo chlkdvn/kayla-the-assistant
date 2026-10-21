@@ -38,25 +38,19 @@ def _parse_phrase_list(raw: str | None, default: tuple[str, ...]) -> tuple[str, 
 class Settings:
     """Values required to construct the application."""
 
-    openai_api_key: str
-    openai_model: str = "gpt-5.4-mini"
+    groq_api_key: str
+    groq_base_url: str = "https://api.groq.com/openai/v1"
+    chat_model: str = "openai/gpt-oss-120b"
     robot_name: str = "Kayla"
-    transcription_model: str = "gpt-4o-mini-transcribe"
-    speech_model: str = "gpt-4o-mini-tts"
-    speech_voice: str = "marin"
+    transcription_model: str = "whisper-large-v3-turbo"
+    speech_model: str = "canopylabs/orpheus-v1-english"
+    speech_voice: str = "hannah"
     microphone_sample_rate: int = 16_000
     audio_input_device: str | None = None
     audio_output_device: str | None = None
-    realtime_model: str = "gpt-realtime-mini"
-    realtime_voice: str = "marin"
-    realtime_transcription_model: str = "gpt-4o-mini-transcribe"
-    realtime_vad_threshold: float = 0.5
     realtime_vad_silence_ms: int = 450
-    realtime_noise_reduction: str = "far_field"
-    realtime_language: str = "en"
     realtime_half_duplex: bool = True
     realtime_echo_cancel: bool = False
-    realtime_provider: str = "openai"
     gemini_api_key: str = ""
     gemini_realtime_model: str = "gemini-3.1-flash-live-preview"
     gemini_voice: str = "Leda"
@@ -94,7 +88,7 @@ class Settings:
     memory_enabled: bool = True
     memory_auto_capture: bool = True
     memory_path: str = "kayla_memory.json"
-    embedding_model: str = "text-embedding-3-small"
+    embedding_model: str = "BAAI/bge-small-en-v1.5"
     memory_top_k: int = 5
 
     @classmethod
@@ -106,38 +100,28 @@ class Settings:
     @classmethod
     def from_mapping(cls, values: Mapping[str, str]) -> Settings:
         """Create settings from a mapping, keeping validation easy to unit test."""
-        api_key = values.get("OPENAI_API_KEY", "").strip()
-        if api_key == "replace-with-your-api-key":
-            api_key = ""
-        # OpenAI is only the brain when the provider is "openai". With the Gemini provider
-        # it is optional (used only for long-term memory + the older chained voice), so a
-        # Gemini-only user can start with just their free Google key.
-        realtime_provider = values.get("KAYLA_REALTIME_PROVIDER", "openai").strip().lower()
-        if realtime_provider == "openai" and not api_key:
+        groq_api_key = values.get("GROQ_API_KEY", "").strip()
+        if groq_api_key == "replace-with-your-api-key":
+            groq_api_key = ""
+        if not groq_api_key:
             raise ConfigurationError(
-                "OPENAI_API_KEY is missing. The OpenAI brain needs it - add it to your .env, "
-                "or set KAYLA_REALTIME_PROVIDER=gemini to use Google's free key instead."
+                "GROQ_API_KEY is missing. Kayla's chat, push-to-talk voice, wake "
+                "greetings and memory seeding need a free Groq key - get one at "
+                "https://console.groq.com/keys and add it to your .env."
             )
+        groq_base_url = values.get("KAYLA_GROQ_BASE_URL", "https://api.groq.com/openai/v1").strip()
 
-        model = values.get("KAYLA_OPENAI_MODEL", "gpt-5.4-mini").strip()
+        model = values.get("KAYLA_CHAT_MODEL", "openai/gpt-oss-120b").strip()
         robot_name = values.get("KAYLA_NAME", "Kayla").strip()
         transcription_model = values.get(
-            "KAYLA_TRANSCRIPTION_MODEL", "gpt-4o-mini-transcribe"
+            "KAYLA_TRANSCRIPTION_MODEL", "whisper-large-v3-turbo"
         ).strip()
-        speech_model = values.get("KAYLA_SPEECH_MODEL", "gpt-4o-mini-tts").strip()
-        speech_voice = values.get("KAYLA_SPEECH_VOICE", "marin").strip()
+        speech_model = values.get("KAYLA_SPEECH_MODEL", "canopylabs/orpheus-v1-english").strip()
+        speech_voice = values.get("KAYLA_SPEECH_VOICE", "hannah").strip()
         sample_rate_text = values.get("KAYLA_MICROPHONE_SAMPLE_RATE", "16000").strip()
         input_device = values.get("KAYLA_AUDIO_INPUT_DEVICE", "").strip() or None
         output_device = values.get("KAYLA_AUDIO_OUTPUT_DEVICE", "").strip() or None
-        realtime_model = values.get("KAYLA_REALTIME_MODEL", "gpt-realtime-mini").strip()
-        realtime_voice = values.get("KAYLA_REALTIME_VOICE", "marin").strip()
-        realtime_transcription_model = values.get(
-            "KAYLA_REALTIME_TRANSCRIPTION_MODEL", "gpt-4o-mini-transcribe"
-        ).strip()
-        realtime_threshold_text = values.get("KAYLA_REALTIME_VAD_THRESHOLD", "0.5").strip()
         realtime_silence_text = values.get("KAYLA_REALTIME_VAD_SILENCE_MS", "450").strip()
-        realtime_noise_reduction = values.get("KAYLA_REALTIME_NOISE_REDUCTION", "far_field").strip()
-        realtime_language = values.get("KAYLA_REALTIME_LANGUAGE", "en").strip()
         realtime_half_duplex = _parse_bool(
             values.get("KAYLA_REALTIME_HALF_DUPLEX", "true"), "KAYLA_REALTIME_HALF_DUPLEX"
         )
@@ -211,11 +195,11 @@ class Settings:
             values.get("KAYLA_MEMORY_AUTO_CAPTURE", "true"), "KAYLA_MEMORY_AUTO_CAPTURE"
         )
         memory_path = values.get("KAYLA_MEMORY_PATH", "kayla_memory.json").strip()
-        embedding_model = values.get("KAYLA_EMBEDDING_MODEL", "text-embedding-3-small").strip()
+        embedding_model = values.get("KAYLA_EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5").strip()
         memory_top_k_text = values.get("KAYLA_MEMORY_TOP_K", "5").strip()
 
         if not model:
-            raise ConfigurationError("KAYLA_OPENAI_MODEL cannot be empty.")
+            raise ConfigurationError("KAYLA_CHAT_MODEL cannot be empty.")
         if not robot_name:
             raise ConfigurationError("KAYLA_NAME cannot be empty.")
         if not transcription_model:
@@ -224,23 +208,10 @@ class Settings:
             raise ConfigurationError("KAYLA_SPEECH_MODEL cannot be empty.")
         if not speech_voice:
             raise ConfigurationError("KAYLA_SPEECH_VOICE cannot be empty.")
-        if not realtime_model:
-            raise ConfigurationError("KAYLA_REALTIME_MODEL cannot be empty.")
-        if not realtime_voice:
-            raise ConfigurationError("KAYLA_REALTIME_VOICE cannot be empty.")
-        if not realtime_transcription_model:
-            raise ConfigurationError("KAYLA_REALTIME_TRANSCRIPTION_MODEL cannot be empty.")
-        if realtime_noise_reduction not in {"near_field", "far_field"}:
-            raise ConfigurationError(
-                "KAYLA_REALTIME_NOISE_REDUCTION must be near_field or far_field."
-            )
-        if realtime_provider not in {"openai", "gemini"}:
-            raise ConfigurationError("KAYLA_REALTIME_PROVIDER must be openai or gemini.")
-        if realtime_provider == "gemini":
-            if not gemini_realtime_model:
-                raise ConfigurationError("KAYLA_GEMINI_REALTIME_MODEL cannot be empty.")
-            if not gemini_voice:
-                raise ConfigurationError("KAYLA_GEMINI_VOICE cannot be empty.")
+        if not gemini_realtime_model:
+            raise ConfigurationError("KAYLA_GEMINI_REALTIME_MODEL cannot be empty.")
+        if not gemini_voice:
+            raise ConfigurationError("KAYLA_GEMINI_VOICE cannot be empty.")
         if keyboard_tool and keyboard_tool not in {"xdotool", "ydotool", "wtype"}:
             raise ConfigurationError(
                 "KAYLA_KEYBOARD must be xdotool, ydotool, wtype, or empty for auto-detection."
@@ -257,13 +228,6 @@ class Settings:
             raise ConfigurationError("KAYLA_MICROPHONE_SAMPLE_RATE must be an integer.") from error
         if sample_rate <= 0:
             raise ConfigurationError("KAYLA_MICROPHONE_SAMPLE_RATE must be positive.")
-
-        try:
-            realtime_threshold = float(realtime_threshold_text)
-        except ValueError as error:
-            raise ConfigurationError("KAYLA_REALTIME_VAD_THRESHOLD must be a number.") from error
-        if not 0 <= realtime_threshold <= 1:
-            raise ConfigurationError("KAYLA_REALTIME_VAD_THRESHOLD must be between 0 and 1.")
 
         try:
             realtime_silence_ms = int(realtime_silence_text)
@@ -332,8 +296,9 @@ class Settings:
             raise ConfigurationError("KAYLA_MEMORY_TOP_K must be positive.")
 
         return cls(
-            openai_api_key=api_key,
-            openai_model=model,
+            groq_api_key=groq_api_key,
+            groq_base_url=groq_base_url,
+            chat_model=model,
             robot_name=robot_name,
             transcription_model=transcription_model,
             speech_model=speech_model,
@@ -341,16 +306,9 @@ class Settings:
             microphone_sample_rate=sample_rate,
             audio_input_device=input_device,
             audio_output_device=output_device,
-            realtime_model=realtime_model,
-            realtime_voice=realtime_voice,
-            realtime_transcription_model=realtime_transcription_model,
-            realtime_vad_threshold=realtime_threshold,
             realtime_vad_silence_ms=realtime_silence_ms,
-            realtime_noise_reduction=realtime_noise_reduction,
-            realtime_language=realtime_language,
             realtime_half_duplex=realtime_half_duplex,
             realtime_echo_cancel=realtime_echo_cancel,
-            realtime_provider=realtime_provider,
             gemini_api_key=gemini_api_key,
             gemini_realtime_model=gemini_realtime_model,
             gemini_voice=gemini_voice,

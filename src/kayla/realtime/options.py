@@ -1,4 +1,4 @@
-"""Validated configuration translated into a Realtime API session payload."""
+"""Validated configuration for the realtime session: tools and VAD timing."""
 
 from __future__ import annotations
 
@@ -295,15 +295,7 @@ _RECALL_TOOL = {
 class RealtimeSessionOptions:
     """Runtime options for one low-latency speech-to-speech session."""
 
-    model: str
-    voice: str
-    transcription_model: str
-    vad_threshold: float
     vad_silence_ms: int
-    noise_reduction: str
-    language: str = "en"
-    sample_rate: int = REALTIME_SAMPLE_RATE
-    max_output_tokens: int = 512
     vision_enabled: bool = False
     screen_enabled: bool = False
     memory_enabled: bool = False
@@ -315,13 +307,7 @@ class RealtimeSessionOptions:
     def from_settings(cls, settings: Settings) -> RealtimeSessionOptions:
         """Select only the settings used by the realtime concern."""
         return cls(
-            model=settings.realtime_model,
-            voice=settings.realtime_voice,
-            transcription_model=settings.realtime_transcription_model,
-            vad_threshold=settings.realtime_vad_threshold,
             vad_silence_ms=settings.realtime_vad_silence_ms,
-            noise_reduction=settings.realtime_noise_reduction,
-            language=settings.realtime_language,
             vision_enabled=settings.vision_enabled,
             screen_enabled=settings.screen_enabled,
             memory_enabled=settings.memory_enabled,
@@ -329,46 +315,6 @@ class RealtimeSessionOptions:
             shell_enabled=settings.shell_enabled,
             face_enabled=settings.face_enabled,
         )
-
-    def api_payload(self, *, instructions: str) -> dict[str, Any]:
-        """Return the current Realtime `session.update` configuration."""
-        payload: dict[str, Any] = {
-            "type": "realtime",
-            "model": self.model,
-            "output_modalities": ["audio"],
-            "instructions": instructions,
-            "max_output_tokens": self.max_output_tokens,
-            "audio": {
-                "input": {
-                    "format": {
-                        "type": "audio/pcm",
-                        "rate": self.sample_rate,
-                    },
-                    "noise_reduction": {"type": self.noise_reduction},
-                    "transcription": {
-                        "model": self.transcription_model,
-                        "language": self.language,
-                    },
-                    "turn_detection": self._turn_detection(
-                        create_response=False,
-                        interrupt_response=True,
-                    ),
-                },
-                "output": {
-                    "format": {
-                        "type": "audio/pcm",
-                        "rate": self.sample_rate,
-                    },
-                    "voice": self.voice,
-                    "speed": 1.0,
-                },
-            },
-        }
-        tools = self.tool_specs()
-        if tools:
-            payload["tools"] = tools
-            payload["tool_choice"] = "auto"
-        return payload
 
     def tool_specs(self) -> list[dict[str, Any]]:
         """Return the enabled tool definitions, provider-independent.
@@ -400,41 +346,3 @@ class RealtimeSessionOptions:
                 ]
             )
         return tools
-
-    def type_mode_update(self, *, enabled: bool) -> dict[str, Any]:
-        """Update VAD so dictation produces transcripts without AI responses."""
-        return {
-            "type": "realtime",
-            "audio": {
-                "input": {
-                    "turn_detection": self._turn_detection(
-                        create_response=False,
-                        interrupt_response=not enabled,
-                    )
-                }
-            },
-        }
-
-    def quiet_mode_update(self, *, live: bool) -> dict[str, Any]:
-        """Update VAD for a behaviour mode: no auto-responses while she is quiet."""
-        return {
-            "type": "realtime",
-            "audio": {
-                "input": {
-                    "turn_detection": self._turn_detection(
-                        create_response=False,
-                        interrupt_response=live,
-                    )
-                }
-            },
-        }
-
-    def _turn_detection(self, *, create_response: bool, interrupt_response: bool) -> dict[str, Any]:
-        return {
-            "type": "server_vad",
-            "threshold": self.vad_threshold,
-            "prefix_padding_ms": 300,
-            "silence_duration_ms": self.vad_silence_ms,
-            "create_response": create_response,
-            "interrupt_response": interrupt_response,
-        }

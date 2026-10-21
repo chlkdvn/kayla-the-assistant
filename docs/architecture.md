@@ -25,17 +25,17 @@ The original text milestone follows this path:
 Terminal UI
     -> ConversationSession
         -> ChatGateway contract
-            -> OpenAIChat implementation
-                -> OpenAI Responses API
+            -> GroqChat implementation
+                -> Groq chat-completions API (OpenAI-compatible SDK)
 ```
 
-The return journey carries two values:
+The return journey carries one value:
 
 - `text`: the answer displayed to the user.
-- `response_id`: the identifier used to continue the same conversation.
 
-`ConversationSession` remembers only that identifier. It does not know anything
-about HTTP, OpenAI SDK objects, or microphones.
+`ConversationSession` remembers the whole conversation as local turns and replays
+them on each request. It does not know anything about HTTP, SDK objects, or
+microphones.
 
 ## Responsibilities
 
@@ -52,14 +52,14 @@ every request because API-level instructions apply only to the current response.
 
 ### AI provider
 
-`ai/gateway.py` defines the small contract the application needs: accept a user
-message and return an answer. `ai/openai_chat.py` is the only module that knows
-the OpenAI SDK.
+`ai/gateway.py` defines the small contract the application needs: accept the
+turn history and return an answer. `ai/groq_chat.py` is the only module that
+knows the OpenAI SDK, pointed at Groq's compatible endpoint.
 
 ### Conversation
 
 `conversation/session.py` owns multi-turn state. Because it depends on the
-gateway contract instead of OpenAI directly, tests can use a fake provider and
+gateway contract instead of a provider directly, tests can use a fake provider and
 future AI providers can be added without changing the session.
 
 ### Interface
@@ -102,15 +102,17 @@ The first voice milestone is a chained push-to-talk workflow:
 
 ```text
 microphone.py
-    -> openai_transcriber.py
+    -> groq_transcriber.py
         -> existing ConversationSession
-            -> openai_speech.py
+            -> groq_speech.py
                 -> speaker.py
 ```
 
 `voice/contracts.py` defines the small data types and interfaces shared by those
 stages. `voice/workflow.py` runs transcription, conversation, and speech
-generation in order. `interfaces/voice_cli.py` owns only the terminal prompts
+generation in order. Long replies are split to fit Groq's 200-character
+speech-generation limit and reassembled before playback.
+`interfaces/voice_cli.py` owns only the terminal prompts
 that start and stop microphone capture.
 
 Push-to-talk was chosen because every stage is visible and independently
@@ -123,15 +125,16 @@ The low-latency path is a separate speech-to-speech architecture:
 
 ```text
 StreamingMicrophone
-    -> persistent Realtime WebSocket
-        -> streaming model audio deltas
+    -> persistent Gemini Live session
+        -> streaming model audio
             -> PcmPlaybackBuffer
                 -> StreamingSpeaker
 ```
 
-`realtime/options.py` owns the API session schema. `realtime/audio.py` owns local
-PCM capture, buffering, and playback. `realtime/session.py` owns the WebSocket
-event loop and interruption state. `interfaces/realtime_cli.py` only renders
+`realtime/options.py` owns the tool schemas and turn-detection timing.
+`realtime/audio.py` owns local PCM capture, buffering, and playback.
+`realtime/gemini_session.py` owns the live-session event loop and interruption
+state. `interfaces/realtime_cli.py` only renders
 human-readable status and transcripts.
 
 `realtime/echo_cancel.py` owns the optional PipeWire WebRTC echo-cancellation
@@ -139,33 +142,26 @@ route. It creates temporary virtual input/output nodes before audio streams open
 and restores the previous defaults afterward. Failure degrades to half-duplex, so
 speaker echo cannot become an uncontrolled conversation loop.
 
-Audio is sent while the user is still talking. Server VAD commits the turn after a
-short silence but does not automatically start inference. The session waits for
-the completed transcript, retrieves relevant vector memories, supplies them as
-per-response instructions, then creates the response. Output audio is played as
-chunks arrive rather than waiting for a complete file.
+Audio is sent while the user is still talking. Gemini's automatic activity
+detection commits the turn after a short silence, and the model starts its
+streaming response by itself - output audio is played as it arrives rather than
+waiting for a complete file. Long-term memory reaches the model through the
+`remember`/`recall` tools, with auto-capture storing each transcript
+automatically.
 
 ### Behaviour modes
 
 Spoken commands ('shut up', 'standby', 'speak', 'be serious', 'be playful', 'be
 helpful', 'work') map to a `set_mode` tool in `realtime/modes.py`. The quiet modes
-are enforced locally on both providers: the OpenAI session turns off automatic
-model responses, and the Gemini session swallows each muted turn's audio at the
-session boundary - so no words escape until a resume word is heard. Tone modes
-inject a CURRENT MODE directive into each response's instructions.
+are enforced locally: the session swallows each muted turn's audio at the
+session boundary - so no words escape until a resume word is heard. The
+CURRENT MODE directive returned by `set_mode` tells the model how to behave;
+tone modes change her style, quiet modes pair the directive with local silence.
 
-When a user speaks during Kayla's answer, the local buffer discards audio that was
-not played. The session reports how many milliseconds were actually heard and
-truncates the assistant conversation item at that position. This prevents future
-responses from assuming the user heard words that were interrupted.
-
-## Milestones
-
-1. Text chat on the computer. **Complete.**
-2. Push-to-talk microphone and speaker flow. **Complete.**
-3. Natural realtime voice conversation. **Complete.**
-4. Wake-word attention gate and on-screen face. **Complete.**
-5. Raspberry Pi deployment.
+When a user speaks during Kayla's answer, the local buffer discards audio that
+was not played and the session reports that Kayla stopped to listen. Because the
+model hears the interruption itself - it is a single full-duplex session - its
+next response already reflects what the user actually heard.
 
 ## Milestones
 

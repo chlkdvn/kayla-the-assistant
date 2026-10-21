@@ -8,7 +8,7 @@ from kayla.realtime.options import RealtimeSessionOptions
 def _all_tools_options() -> RealtimeSessionOptions:
     settings = Settings.from_mapping(
         {
-            "OPENAI_API_KEY": "test-key",
+            "GROQ_API_KEY": "test-key",
             "KAYLA_VISION_ENABLED": "true",
             "KAYLA_MEMORY_ENABLED": "true",
             "KAYLA_BROWSER_ENABLED": "true",

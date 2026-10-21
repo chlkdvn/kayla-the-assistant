@@ -6,7 +6,8 @@ when the conversation touches them — giving her a consistent inner life instea
 a personality that only exists in the prompt.
 
 Run once:  uv run kayla-seed-memory
-(Delete kayla_memory.json first if you want to reset her.)
+(Delete kayla_memory.json first if you want to reset her, or if the embedding
+model changed - memories embedded with a different model cannot be matched.)
 """
 
 from __future__ import annotations
@@ -56,17 +57,12 @@ def seed_backstory(store: _Rememberer) -> int:
 def main() -> None:
     from pathlib import Path
 
-    from openai import OpenAI
-
     from kayla.config.settings import Settings
-    from kayla.memory.openai_embedder import OpenAIEmbedder
+    from kayla.memory.fastembed_embedder import FastEmbedEmbedder
     from kayla.memory.store import MemoryStore
 
     settings = Settings.from_env()
-    embedder = OpenAIEmbedder(
-        client=OpenAI(api_key=settings.openai_api_key),
-        model=settings.embedding_model,
-    )
+    embedder = FastEmbedEmbedder(model_name=settings.embedding_model)
     store = MemoryStore(
         embedder=embedder,
         path=Path(settings.memory_path),

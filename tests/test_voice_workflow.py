@@ -5,10 +5,9 @@ from kayla.voice.workflow import VoiceWorkflow
 
 
 class FakeChatGateway:
-    def reply(self, user_text: str, previous_response_id: str | None = None) -> AIReply:
-        assert user_text == "Hello Kayla"
-        assert previous_response_id is None
-        return AIReply(text="Hello, builder!", response_id="response-1")
+    def reply(self, turns: list[object]) -> AIReply:
+        assert [turn.text for turn in turns] == ["Hello Kayla"]
+        return AIReply(text="Hello, builder!")
 
 
 class FakeTranscriber:

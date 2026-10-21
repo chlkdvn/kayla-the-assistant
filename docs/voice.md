@@ -52,21 +52,22 @@ information to interpret them as sound.
 
 ### 2. Speech recognition
 
-`OpenAITranscriber` uploads the in-memory WAV to the configured transcription
+`GroqTranscriber` uploads the in-memory WAV to the configured Groq transcription
 model. It returns text such as `Hello Kayla`. The recording is not written to the
 project directory.
 
 ### 3. Conversation
 
 The transcript is passed into the same `ConversationSession` used by typed chat.
-That session remembers the previous response ID, so follow-up questions remain
-part of the same conversation.
+That session keeps the whole conversation as local turns, so follow-up questions
+remain part of the same conversation.
 
 ### 4. Speech generation
 
-`OpenAISpeechGenerator` sends Kayla's response text, the selected voice, and voice
-style instructions to the speech endpoint. It asks for WAV because WAV avoids a
-separate MP3 decoder and is quick to play.
+`GroqSpeechGenerator` sends Kayla's response text and the selected voice to
+Groq's speech endpoint. Replies longer than Groq's 200-character input limit are
+split into chunks and the WAVs are concatenated. It asks for WAV because WAV
+avoids a separate MP3 decoder and is quick to play.
 
 ### 5. Speaker playback
 

@@ -5,12 +5,11 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from kayla.config.settings import Settings
+from kayla.config.settings import ConfigurationError, Settings
 from kayla.prompts.kayla_personality import build_kayla_realtime_instructions
 from kayla.realtime.audio import StreamingMicrophone, StreamingSpeaker
 from kayla.realtime.events import RealtimeDisplayEvent
 from kayla.realtime.options import RealtimeSessionOptions
-from kayla.realtime.session import RealtimeVoiceSession
 
 if TYPE_CHECKING:
     from kayla.realtime.gemini_session import GeminiVoiceSession
@@ -21,22 +20,22 @@ def build_realtime_session(
     *,
     on_event: Callable[[RealtimeDisplayEvent], None],
     face: object | None = None,
-) -> RealtimeVoiceSession | GeminiVoiceSession:
-    """Create live audio I/O and the persistent Realtime API session."""
-    options = RealtimeSessionOptions.from_settings(settings)
-    provider = settings.realtime_provider
-    if provider == "gemini":
-        from kayla.realtime.gemini_session import GEMINI_INPUT_RATE, GEMINI_OUTPUT_RATE
+) -> GeminiVoiceSession:
+    """Create live audio I/O and the persistent Gemini Live session."""
+    from kayla.realtime.gemini_session import GEMINI_INPUT_RATE, GEMINI_OUTPUT_RATE
 
-        input_rate, output_rate = GEMINI_INPUT_RATE, GEMINI_OUTPUT_RATE
-    else:
-        input_rate = output_rate = options.sample_rate
+    if not settings.gemini_api_key:
+        raise ConfigurationError(
+            "Her voice runs on Google Gemini, which needs GEMINI_API_KEY in your .env. "
+            "Get a free one at https://aistudio.google.com/apikey."
+        )
+    options = RealtimeSessionOptions.from_settings(settings)
     microphone = StreamingMicrophone(
-        sample_rate=input_rate,
+        sample_rate=GEMINI_INPUT_RATE,
         device=settings.audio_input_device,
     )
     speaker = StreamingSpeaker(
-        sample_rate=output_rate,
+        sample_rate=GEMINI_OUTPUT_RATE,
         device=settings.audio_output_device,
     )
     camera = None
@@ -53,27 +52,23 @@ def build_realtime_session(
 
         screen = GrimScreen(max_width=settings.screen_max_width)
     memory = None
-    if settings.memory_enabled and not settings.openai_api_key:
-        # Long-term memory currently embeds through OpenAI, so without that key she simply
-        # runs without memory rather than failing to start (fine for a Gemini-only setup).
-        print("Long-term memory is off (needs an OpenAI key for embeddings); continuing.")
-    elif settings.memory_enabled:
-        from pathlib import Path
+    if settings.memory_enabled:
+        # Embedding runs locally (fastembed); degrade to no memory if the model
+        # cannot load rather than failing to start.
+        try:
+            from pathlib import Path
 
-        from openai import OpenAI
+            from kayla.memory.fastembed_embedder import FastEmbedEmbedder
+            from kayla.memory.store import MemoryStore
 
-        from kayla.memory.openai_embedder import OpenAIEmbedder
-        from kayla.memory.store import MemoryStore
-
-        embedder = OpenAIEmbedder(
-            client=OpenAI(api_key=settings.openai_api_key),
-            model=settings.embedding_model,
-        )
-        memory = MemoryStore(
-            embedder=embedder,
-            path=Path(settings.memory_path),
-            top_k=settings.memory_top_k,
-        )
+            embedder = FastEmbedEmbedder(model_name=settings.embedding_model)
+            memory = MemoryStore(
+                embedder=embedder,
+                path=Path(settings.memory_path),
+                top_k=settings.memory_top_k,
+            )
+        except Exception as error:  # noqa: BLE001 - memory is optional; keep her running
+            print(f"Long-term memory is off ({error}); continuing.")
     browser = None
     if settings.browser_enabled:
         from kayla.system.browser import Browser
@@ -123,22 +118,13 @@ def build_realtime_session(
         echo_canceller=echo_canceller,
         face=face,
     )
-    if provider == "gemini":
-        if not settings.gemini_api_key:
-            from kayla.config.settings import ConfigurationError
+    from kayla.realtime.gemini_session import GeminiVoiceSession
 
-            raise ConfigurationError(
-                "KAYLA_REALTIME_PROVIDER=gemini needs a Google AI Studio key. Get a free one "
-                "at https://aistudio.google.com/apikey and set GEMINI_API_KEY in your .env."
-            )
-        from kayla.realtime.gemini_session import GeminiVoiceSession
-
-        return GeminiVoiceSession(
-            api_key=settings.gemini_api_key,
-            model=settings.gemini_realtime_model,
-            voice=settings.gemini_voice,
-            affective_dialog=settings.gemini_affective_dialog,
-            tone_cues=settings.tone_cues_enabled,
-            **shared,
-        )
-    return RealtimeVoiceSession(api_key=settings.openai_api_key, **shared)
+    return GeminiVoiceSession(
+        api_key=settings.gemini_api_key,
+        model=settings.gemini_realtime_model,
+        voice=settings.gemini_voice,
+        affective_dialog=settings.gemini_affective_dialog,
+        tone_cues=settings.tone_cues_enabled,
+        **shared,
+    )

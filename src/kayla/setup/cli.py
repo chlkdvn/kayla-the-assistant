@@ -11,7 +11,13 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-from kayla.setup.wizard import FREE_GEMINI_KEY_URL, Answers, build_env_text, summary
+from kayla.setup.wizard import (
+    FREE_GEMINI_KEY_URL,
+    FREE_GROQ_KEY_URL,
+    Answers,
+    build_env_text,
+    summary,
+)
 
 _VOSK_MODEL_NAME = "vosk-model-small-en-us-0.15"
 _VOSK_MODEL_URL = f"https://alphacephei.com/vosk/models/{_VOSK_MODEL_NAME}.zip"
@@ -93,8 +99,9 @@ def main() -> None:
     print(f"\nShe uses Google Gemini for her voice. Get a FREE key: {FREE_GEMINI_KEY_URL}")
     gemini_key = _ask_required("Paste your Gemini key")
 
-    print("\nAn OpenAI key is OPTIONAL — only for long-term memory + push-to-talk voice.")
-    openai_key = _ask("OpenAI key (Enter to skip)", "")
+    print("\nChat, push-to-talk voice and wake greetings run on Groq.")
+    print(f"Get a FREE key: {FREE_GROQ_KEY_URL}")
+    groq_key = _ask_required("Paste your Groq key")
 
     input_device, output_device = _choose_audio()
 
@@ -116,7 +123,7 @@ def main() -> None:
 
     answers = Answers(
         gemini_api_key=gemini_key,
-        openai_api_key=openai_key,
+        groq_api_key=groq_key,
         robot_name=name,
         audio_input_device=input_device,
         audio_output_device=output_device,

@@ -23,17 +23,20 @@ control, and an animated on-screen face.
 ## Current module boundaries
 
 - `config/`: environment variables and application settings only.
-- `ai/`: provider interfaces and OpenAI API implementation only.
+- `ai/`: provider interfaces and the Groq chat implementation only.
 - `conversation/`: provider-independent conversation state and orchestration.
 - `prompts/`: version-controlled instructions that shape Kayla's behavior.
 - `interfaces/`: ways a human interacts with Kayla, beginning with the terminal.
 - `voice/`: microphone and speaker concerns when voice is introduced.
-- `realtime/`: continuous PCM streaming, Realtime API state, and interruption
-  handling. Keep it independent from the chained `voice/` fallback.
+- `memory/`: local vector memory store and the local embedding model.
+- `realtime/`: continuous PCM streaming, Gemini Live session state, and
+  interruption handling. Keep it independent from the chained `voice/` fallback.
+
 ## Secrets
 
 - Never commit `.env` or an API key.
-- Keep `OPENAI_API_KEY` in the local environment or local `.env` file.
+- Keep `GROQ_API_KEY` and `GEMINI_API_KEY` in the local environment or local
+  `.env` file.
 - Examples must use placeholders, never real credentials.
 
 ## Verification
@@ -46,6 +49,6 @@ uv run ruff check .
 uv run ruff format --check .
 ```
 
-Tests must not call the live OpenAI API. Use fakes at the `ChatGateway` boundary.
-Voice tests must also fake transcription and speech generation. A live voice
-smoke test may be run manually when the owner explicitly asks to test voice.
+Tests must not call the live Groq or Gemini APIs. Use fakes at the `ChatGateway`
+boundary. Voice tests must also fake transcription and speech generation. A live
+voice smoke test may be run manually when the owner explicitly asks to test voice.

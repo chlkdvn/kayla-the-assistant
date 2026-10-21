@@ -1,18 +1,18 @@
-from kayla.ai.gateway import AIReply
+from kayla.ai.gateway import AIReply, ChatTurn
 from kayla.conversation.session import ConversationSession
 
 
 class FakeChatGateway:
     def __init__(self) -> None:
-        self.calls: list[tuple[str, str | None]] = []
+        self.calls: list[list[ChatTurn]] = []
 
-    def reply(self, user_text: str, previous_response_id: str | None = None) -> AIReply:
-        self.calls.append((user_text, previous_response_id))
+    def reply(self, turns: list[ChatTurn]) -> AIReply:
+        self.calls.append(turns)
         turn_number = len(self.calls)
-        return AIReply(text=f"answer {turn_number}", response_id=f"response-{turn_number}")
+        return AIReply(text=f"answer {turn_number}")
 
 
-def test_session_passes_response_id_to_the_next_turn() -> None:
+def test_session_sends_the_whole_conversation_so_far() -> None:
     gateway = FakeChatGateway()
     session = ConversationSession(gateway=gateway)
 
@@ -21,8 +21,12 @@ def test_session_passes_response_id_to_the_next_turn() -> None:
 
     assert second_reply.text == "answer 2"
     assert gateway.calls == [
-        ("Hello", None),
-        ("Do you remember me?", "response-1"),
+        [ChatTurn(role="user", text="Hello")],
+        [
+            ChatTurn(role="user", text="Hello"),
+            ChatTurn(role="assistant", text="answer 1"),
+            ChatTurn(role="user", text="Do you remember me?"),
+        ],
     ]
 
 
@@ -34,7 +38,7 @@ def test_session_reset_starts_a_new_conversation() -> None:
     session.reset()
     session.send("New chat")
 
-    assert gateway.calls[-1] == ("New chat", None)
+    assert gateway.calls[-1] == [ChatTurn(role="user", text="New chat")]
 
 
 def test_session_rejects_an_empty_message() -> None:

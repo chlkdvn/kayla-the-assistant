@@ -124,7 +124,7 @@ def _done() -> Any:
 def _build_session(
     face: FakeFace, on_event: Any, camera: Any = None, screen: Any = None
 ) -> GeminiVoiceSession:
-    settings = Settings.from_mapping({"OPENAI_API_KEY": "x"})
+    settings = Settings.from_mapping({"GROQ_API_KEY": "x"})
     options = RealtimeSessionOptions.from_settings(settings)
     return GeminiVoiceSession(
         api_key="x",

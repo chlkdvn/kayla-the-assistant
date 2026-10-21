@@ -24,7 +24,7 @@ from kayla.realtime.dictation import parse_dictation
 from kayla.realtime.echo_cancel import PulseEchoCanceller
 from kayla.realtime.events import RealtimeDisplayEvent
 from kayla.realtime.gemini_tools import gemini_tools
-from kayla.realtime.modes import DEFAULT_MODE, QUIET_MODES, parse_mode
+from kayla.realtime.modes import DEFAULT_MODE, QUIET_MODES, mode_directive, parse_mode
 from kayla.realtime.options import (
     LOOK_TOOL_NAME,
     OPEN_URL_TOOL_NAME,
@@ -519,11 +519,12 @@ class GeminiVoiceSession:
         valid = {"shutup", "standby", "speak", "serious", "playful", "helpful", "work"}
         self._mode = mode if mode in valid else "speak"
         self._emit("acted", f"Mode: {self._mode}")
-        return (
-            "Now completely silent until they demand you speak again."
-            if self._mode in QUIET_MODES
-            else "Mode set; keep behaving that way until it changes."
+        directive = mode_directive(self._mode)
+        enforcement = (
+            " The application enforces silence locally until they demand you "
+            "speak again - stay in this mode until it changes."
         )
+        return directive + enforcement
 
     def _set_vision(self, enabled: str) -> str:
         """Turn the camera on or off at the user's request, releasing it when off."""

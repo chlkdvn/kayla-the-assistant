@@ -49,9 +49,9 @@ class Announcer(Protocol):
 class TextAnnouncer:
     """Print wake/sleep acknowledgements when spoken TTS is unavailable.
 
-    Gemini-only setups have no OpenAI key, and long-term memory already degrades
-    to "runs without memory" in that case (see realtime/app.py). Do the same
-    here instead of crashing inside OpenAI() with "Missing credentials".
+    Spoken greetings depend on the Groq speech endpoint being usable (model
+    terms accepted, network up). Do the same here instead of crashing the
+    whole realtime session over a greeting.
     """
 
     def __init__(self, *, greeting: str, farewell: str) -> None:
@@ -127,30 +127,19 @@ def build_attention_gate(
     )
 
 
-def build_announcer(
-    settings: Settings, *, client: Any | None = None
-) -> SpokenAnnouncer | TextAnnouncer:  # noqa: E501
+def build_announcer(settings: Settings, *, client: Any | None = None) -> SpokenAnnouncer:
     """Build the spoken acknowledgement from the existing TTS and speaker.
 
-    Without an OpenAI key (a normal Gemini-only setup) fall back to printed
-    acknowledgements so `kayla-realtime` still starts.
+    Callers should be prepared to fall back to `TextAnnouncer` when preparing
+    the speech fails (for example until the TTS model's terms are accepted).
     """
-    if not settings.openai_api_key and client is None:
-        print(
-            "Wake announcements will show as text "
-            "(needs an OpenAI key for spoken greetings); continuing."
-        )
-        return TextAnnouncer(
-            greeting=settings.wake_greeting,
-            farewell=settings.wake_farewell,
-        )
     from openai import OpenAI
 
-    from kayla.voice.openai_speech import OpenAISpeechGenerator
+    from kayla.voice.groq_speech import GroqSpeechGenerator
     from kayla.voice.speaker import SoundDeviceSpeaker
 
-    client = client or OpenAI(api_key=settings.openai_api_key)
-    speech = OpenAISpeechGenerator(
+    client = client or OpenAI(api_key=settings.groq_api_key, base_url=settings.groq_base_url)
+    speech = GroqSpeechGenerator(
         client=client,
         model=settings.speech_model,
         voice=settings.speech_voice,
@@ -320,7 +309,15 @@ async def run_realtime_with_gate(settings: Settings, *, poll_interval: float = 0
     loop = asyncio.get_running_loop()
     display = RealtimeTerminalDisplay(robot_name=settings.robot_name)
     announcer = build_announcer(settings)
-    announcer.prepare()
+    try:
+        announcer.prepare()
+    except Exception as error:  # noqa: BLE001 - a greeting must never block starting her
+        print(f"Wake announcements will show as text (speech unavailable: {error}); continuing.")
+        announcer = TextAnnouncer(
+            greeting=settings.wake_greeting,
+            farewell=settings.wake_farewell,
+        )
+        announcer.prepare()
     background_announcer = _BackgroundAnnouncer(announcer, loop)
 
     face, face_proc = _open_face(settings)

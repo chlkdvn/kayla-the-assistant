@@ -20,40 +20,38 @@ relevant right now. That's retrieval-augmented generation (RAG).
 
 ## How Kayla uses it
 
-Realtime memory now has two layers:
+Realtime memory works in three ways:
 
 - **`remember`** — saves a clear, self-contained fact ("Their dog is named Rex").
   Triggered whenever the user shares something personal or worth keeping.
-- **Automatic recall before every normal response** — the completed transcript is
-  embedded, the closest memories are selected, and only those notes are added to
-  that response's instructions. Kayla no longer has to remember to call a tool first.
-- **`recall`** remains available when the model needs a second search with a more
-  specific query.
+- **`recall`** — searches the notes with a specific query. Kayla is prompted to
+  call it proactively whenever a question might touch something told to her
+  before, and it surfaces only the closest few memories.
+- **Auto-capture (on by default):** beyond what Kayla chooses to save, everything
+  you say is transcribed and stored automatically, so nothing is missed — you
+  never have to tell it to remember. Turn it off with
+  `KAYLA_MEMORY_AUTO_CAPTURE=false` to go back to Kayla-decides-only. Dictation
+  in typing mode is never stored.
 
 You'll see `[Remembered: ...]` and `[Checked memory.]` in the terminal.
-
-**Auto-capture (on by default):** beyond what Kayla chooses to save, everything you
-say is transcribed and stored automatically, so nothing is missed — you never have
-to tell it to remember. Turn it off with `KAYLA_MEMORY_AUTO_CAPTURE=false` to go back
-to Kayla-decides-only. Recall happens before the current transcript is stored, so a
-turn cannot retrieve itself as a fake "memory." Dictation in typing mode is never
-stored.
 
 ## Modules
 
 - `memory/store.py` — `MemoryStore`: save to a JSON file, recall top-K by cosine
   similarity. Pure logic, no model required (tested with a fake embedder).
-- `memory/openai_embedder.py` — text → vector via OpenAI embeddings (cheap), behind
-  an `Embedder` interface so a free local embedder can swap in later.
-- `realtime/options.py` / `realtime/session.py` — the `remember`/`recall` tools and
-  their handlers.
+- `memory/fastembed_embedder.py` — text → vector with a local ONNX model
+  (fastembed). No API key, no network call at recall time; the model downloads
+  once on first use. Behind the same `Embedder` interface, so another embedder
+  can swap in.
+- `realtime/options.py` / `realtime/gemini_session.py` — the `remember`/`recall`
+  tool schemas and their handlers.
 
 ## Configuration
 
 ```text
 KAYLA_MEMORY_ENABLED=true                 # set false to drop the memory tools
 KAYLA_MEMORY_PATH=kayla_memory.json         # where memories are stored (gitignored)
-KAYLA_EMBEDDING_MODEL=text-embedding-3-small
+KAYLA_EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
 KAYLA_MEMORY_TOP_K=5                      # how many memories to pull per recall
 ```
 
@@ -61,7 +59,7 @@ KAYLA_MEMORY_TOP_K=5                      # how many memories to pull per recall
 
 - Memories persist in `kayla_memory.json` between runs; delete the file to wipe
   Kayla's memory.
-- Embedding cost is tiny (fractions of a cent), and the savings are large: you
-  never resend the whole memory, only the relevant few.
-- Waiting for the completed transcript and memory lookup adds a small amount of
-  latency before each answer, in exchange for reliable recall.
+- Deleting the file is also required when the embedding model changes: vectors
+  from different models have different widths and are ignored on recall.
+- Embedding runs locally and is free. The savings are still large: you never
+  resend the whole memory, only the relevant few.

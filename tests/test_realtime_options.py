@@ -3,85 +3,48 @@ from kayla.prompts.kayla_personality import build_kayla_realtime_instructions
 from kayla.realtime.options import RealtimeSessionOptions
 
 
-def test_realtime_options_create_a_low_latency_audio_session() -> None:
-    settings = Settings.from_mapping({"OPENAI_API_KEY": "test-key"})
-    options = RealtimeSessionOptions.from_settings(settings)
-
-    payload = options.api_payload(instructions="Be Kayla.")
-
-    assert payload["model"] == "gpt-realtime-mini"
-    assert payload["output_modalities"] == ["audio"]
-    assert payload["audio"]["input"]["format"] == {
-        "type": "audio/pcm",
-        "rate": 24_000,
-    }
-    assert payload["audio"]["input"]["transcription"] == {
-        "model": "gpt-4o-mini-transcribe",
-        "language": "en",
-    }
-    assert payload["audio"]["input"]["turn_detection"] == {
-        "type": "server_vad",
-        "threshold": 0.5,
-        "prefix_padding_ms": 300,
-        "silence_duration_ms": 450,
-        "create_response": False,
-        "interrupt_response": True,
-    }
-    assert payload["audio"]["output"]["voice"] == "marin"
-    assert payload["audio"]["output"]["format"] == {
-        "type": "audio/pcm",
-        "rate": 24_000,
-    }
+def _options(**overrides: str) -> RealtimeSessionOptions:
+    settings = Settings.from_mapping({"GROQ_API_KEY": "test-key", **overrides})
+    return RealtimeSessionOptions.from_settings(settings)
 
 
-def test_payload_offers_the_look_tool_when_vision_is_enabled() -> None:
-    settings = Settings.from_mapping({"OPENAI_API_KEY": "test-key", "KAYLA_VISION_ENABLED": "true"})
-    options = RealtimeSessionOptions.from_settings(settings)
+def test_options_track_the_gemini_silence_timing() -> None:
+    options = _options()
 
-    payload = options.api_payload(instructions="Be Kayla.")
-
-    assert payload["tool_choice"] == "auto"
-    assert any(tool["name"] == "look" for tool in payload["tools"])
+    assert options.vad_silence_ms == 450
 
 
-def test_payload_always_includes_at_least_the_mode_tool() -> None:
-    settings = Settings.from_mapping(
-        {
-            "OPENAI_API_KEY": "test-key",
-            "KAYLA_VISION_ENABLED": "false",
-            "KAYLA_MEMORY_ENABLED": "false",
-            "KAYLA_BROWSER_ENABLED": "false",
-            "KAYLA_SHELL_ENABLED": "false",
-        }
+def test_tool_specs_offer_the_look_tool_when_vision_is_enabled() -> None:
+    options = _options(KAYLA_VISION_ENABLED="true")
+
+    assert any(tool["name"] == "look" for tool in options.tool_specs())
+
+
+def test_tool_specs_always_include_at_least_the_mode_tool() -> None:
+    options = _options(
+        KAYLA_VISION_ENABLED="false",
+        KAYLA_MEMORY_ENABLED="false",
+        KAYLA_BROWSER_ENABLED="false",
+        KAYLA_SHELL_ENABLED="false",
     )
-    options = RealtimeSessionOptions.from_settings(settings)
 
-    payload = options.api_payload(instructions="Be Kayla.")
-
-    names = [tool["name"] for tool in payload["tools"]]
-    assert names == ["set_mode"]
+    assert [tool["name"] for tool in options.tool_specs()] == ["set_mode"]
 
 
-def test_payload_offers_browser_tools_when_enabled() -> None:
-    settings = Settings.from_mapping(
-        {"OPENAI_API_KEY": "test-key", "KAYLA_BROWSER_ENABLED": "true"}
-    )  # noqa: E501
-    options = RealtimeSessionOptions.from_settings(settings)
+def test_tool_specs_offer_browser_tools_when_enabled() -> None:
+    options = _options(KAYLA_BROWSER_ENABLED="true")
 
-    names = {tool["name"] for tool in options.api_payload(instructions="x")["tools"]}
+    names = {tool["name"] for tool in options.tool_specs()}
 
     assert {"open_url", "web_search"} <= names
 
 
-def test_payload_offers_run_command_only_when_shell_is_enabled() -> None:
-    on = Settings.from_mapping({"OPENAI_API_KEY": "test-key", "KAYLA_SHELL_ENABLED": "true"})
-    off = Settings.from_mapping({"OPENAI_API_KEY": "test-key", "KAYLA_SHELL_ENABLED": "false"})
+def test_tool_specs_offer_run_command_only_when_shell_is_enabled() -> None:
+    on = _options(KAYLA_SHELL_ENABLED="true")
+    off = _options(KAYLA_SHELL_ENABLED="false")
 
-    on_payload = RealtimeSessionOptions.from_settings(on).api_payload(instructions="x")
-    off_payload = RealtimeSessionOptions.from_settings(off).api_payload(instructions="x")
-
-    on_names = {tool["name"] for tool in on_payload["tools"]}
-    off_names = {tool["name"] for tool in off_payload.get("tools", [])}
+    on_names = {tool["name"] for tool in on.tool_specs()}
+    off_names = {tool["name"] for tool in off.tool_specs()}
     assert {
         "run_command",
         "run_in_terminal",
@@ -96,38 +59,10 @@ def test_payload_offers_run_command_only_when_shell_is_enabled() -> None:
     assert "start_type_mode" not in off_names
 
 
-def test_type_mode_update_keeps_vad_but_disables_automatic_responses() -> None:
-    options = RealtimeSessionOptions.from_settings(
-        Settings.from_mapping({"OPENAI_API_KEY": "test-key"})
-    )
+def test_tool_specs_offer_memory_tools_when_memory_is_enabled() -> None:
+    options = _options(KAYLA_MEMORY_ENABLED="true")
 
-    payload = options.type_mode_update(enabled=True)
-    turn_detection = payload["audio"]["input"]["turn_detection"]
-
-    assert payload["type"] == "realtime"
-    assert turn_detection["type"] == "server_vad"
-    assert turn_detection["create_response"] is False
-    assert turn_detection["interrupt_response"] is False
-
-
-def test_leaving_type_mode_restores_manually_controlled_responses() -> None:
-    options = RealtimeSessionOptions.from_settings(
-        Settings.from_mapping({"OPENAI_API_KEY": "test-key"})
-    )
-
-    turn_detection = options.type_mode_update(enabled=False)["audio"]["input"]["turn_detection"]
-
-    assert turn_detection["create_response"] is False
-    assert turn_detection["interrupt_response"] is True
-
-
-def test_payload_offers_memory_tools_when_memory_is_enabled() -> None:
-    settings = Settings.from_mapping({"OPENAI_API_KEY": "test-key", "KAYLA_MEMORY_ENABLED": "true"})
-    options = RealtimeSessionOptions.from_settings(settings)
-
-    payload = options.api_payload(instructions="Be Kayla.")
-
-    names = {tool["name"] for tool in payload["tools"]}
+    names = {tool["name"] for tool in options.tool_specs()}
     assert {"remember", "recall"} <= names
 
 
@@ -180,9 +115,8 @@ def test_realtime_prompt_acts_before_speaking_for_one_shot_typing() -> None:
 
 
 def test_type_text_tool_supports_direct_and_composed_writing() -> None:
-    settings = Settings.from_mapping({"OPENAI_API_KEY": "test-key", "KAYLA_SHELL_ENABLED": "true"})
-    payload = RealtimeSessionOptions.from_settings(settings).api_payload(instructions="x")
-    tool = next(tool for tool in payload["tools"] if tool["name"] == "type_text")
+    options = _options(KAYLA_SHELL_ENABLED="true")
+    tool = next(tool for tool in options.tool_specs() if tool["name"] == "type_text")
 
     assert "exact words" in tool["description"].lower()
     assert "draft" in tool["description"].lower()

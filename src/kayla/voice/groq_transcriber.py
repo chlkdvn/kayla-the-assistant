@@ -1,4 +1,4 @@
-"""OpenAI speech-to-text implementation."""
+"""Groq speech-to-text implementation (Whisper on Groq's LPU)."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from typing import Any
 from kayla.voice.contracts import AudioClip
 
 
-class OpenAITranscriber:
-    """Turn an audio clip into text with OpenAI's transcription endpoint."""
+class GroqTranscriber:
+    """Turn an audio clip into text with Groq's transcription endpoint."""
 
     def __init__(self, *, client: Any, model: str) -> None:
         self._client = client

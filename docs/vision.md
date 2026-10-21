@@ -12,11 +12,11 @@ and sent to the cloud; nothing is sent between looks.
 You: "Kayla, what am I holding?"
   -> the model decides it needs to see and calls the look tool
   -> OpenCVCamera grabs ONE frame, downscaled + JPEG-encoded
-  -> the frame is added to the conversation as an input_image
+  -> the frame rides back inside the tool's response as an attached image
   -> Kayla answers from what it sees ("looks like a Phillips screwdriver")
 ```
 
-The same OpenAI model that talks also sees — no separate vision model. A local
+The same Gemini model that talks also sees — no separate vision model. A local
 detector (YOLO/MediaPipe) would only say "person/object detected", not understand
 what's happening, so it isn't used here (it could be added later purely as a cheap
 "is anyone there?" trigger).
@@ -25,10 +25,10 @@ what's happening, so it isn't used here (it could be added later purely as a che
 
 - `vision/camera.py` — `Camera` interface and `OpenCVCamera` (opens the webcam only
   for the instant of capture, then releases it).
-- `vision/encoding.py` — JPEG bytes → `data:` URL for the input_image item.
 - `realtime/options.py` — adds the `look` tool to the session when vision is on.
-- `realtime/session.py` — handles the tool call: capture → attach image → respond.
-  If the camera is unavailable, Kayla is told so and just says it can't see.
+- `realtime/gemini_session.py` — handles the tool call: capture → attach image →
+  respond. If the camera is unavailable, Kayla is told so and just says it can't
+  see.
 
 ## Configuration
 

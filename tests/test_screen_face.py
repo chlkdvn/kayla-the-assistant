@@ -89,13 +89,13 @@ def test_screen_face_sends_mode_and_speak_lines() -> None:
 
 
 def test_face_settings_default_off_but_configurable() -> None:
-    off = Settings.from_mapping({"OPENAI_API_KEY": "x"})
+    off = Settings.from_mapping({"GROQ_API_KEY": "x"})
     assert off.face_enabled is False
     assert off.face_port == 8765
     assert off.face_autostart is True
 
     on = Settings.from_mapping(
-        {"OPENAI_API_KEY": "x", "KAYLA_FACE_ENABLED": "true", "KAYLA_FACE_PORT": "9100"}
+        {"GROQ_API_KEY": "x", "KAYLA_FACE_ENABLED": "true", "KAYLA_FACE_PORT": "9100"}
     )
     assert on.face_enabled is True
     assert on.face_port == 9100

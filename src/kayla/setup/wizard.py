@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 FREE_GEMINI_KEY_URL = "https://aistudio.google.com/apikey"
+FREE_GROQ_KEY_URL = "https://console.groq.com/keys"
 
 
 @dataclass(frozen=True, slots=True)
@@ -16,7 +17,7 @@ class Answers:
     """Everything the wizard needs to write a working configuration."""
 
     gemini_api_key: str
-    openai_api_key: str = ""
+    groq_api_key: str
     robot_name: str = "Kayla"
     audio_input_device: str = ""
     audio_output_device: str = ""
@@ -40,11 +41,10 @@ def build_env_text(a: Answers) -> str:
     lines = [
         "# Written by `kayla-setup`. Holds your private keys - never commit this file.",
         "",
-        "# Her brain: Gemini Live (free key, cheaper audio).",
-        "KAYLA_REALTIME_PROVIDER=gemini",
+        "# Her voice brain: Gemini Live (free key, cheaper audio).",
         f"GEMINI_API_KEY={a.gemini_api_key}",
-        "# Optional - only long-term memory + the push-to-talk voice mode use this.",
-        f"OPENAI_API_KEY={a.openai_api_key}",
+        "# Her chat, push-to-talk voice and wake greetings: Groq (free key).",
+        f"GROQ_API_KEY={a.groq_api_key}",
         f"KAYLA_NAME={a.robot_name}",
         "",
         "# Gemini voice.",
@@ -65,7 +65,7 @@ def build_env_text(a: Answers) -> str:
         f"KAYLA_SCREEN_ENABLED={_b(a.screen_enabled)}",
         "KAYLA_SCREEN_MAX_WIDTH=1280",
         "",
-        "# Long-term memory (auto-off if no OpenAI key).",
+        "# Long-term memory (embeddings run locally on this machine).",
         "KAYLA_MEMORY_ENABLED=true",
         "KAYLA_MEMORY_AUTO_CAPTURE=true",
         "KAYLA_MEMORY_PATH=kayla_memory.json",
@@ -90,9 +90,12 @@ def build_env_text(a: Answers) -> str:
         "KAYLA_SHELL_BLOCK_DANGEROUS=true",
         "KAYLA_KEYBOARD=wtype",
         "",
-        "# OpenAI-only extras (text chat + push-to-talk); ignored on a Gemini setup.",
-        "KAYLA_OPENAI_MODEL=gpt-5.4-mini",
-        "KAYLA_EMBEDDING_MODEL=text-embedding-3-small",
+        "# Groq models (chat + push-to-talk voice + local memory seeding).",
+        "KAYLA_CHAT_MODEL=openai/gpt-oss-120b",
+        "KAYLA_TRANSCRIPTION_MODEL=whisper-large-v3-turbo",
+        "KAYLA_SPEECH_MODEL=canopylabs/orpheus-v1-english",
+        "KAYLA_SPEECH_VOICE=hannah",
+        "KAYLA_EMBEDDING_MODEL=BAAI/bge-small-en-v1.5",
     ]
     return "\n".join(lines) + "\n"
 
@@ -102,8 +105,9 @@ def summary(a: Answers) -> list[str]:
     on = "on"
     off = "off"
     return [
-        f"Brain:   Gemini ({'key set' if a.gemini_api_key else 'NO KEY - she will not start'})",
-        f"Memory:  {on if a.openai_api_key else off + ' (add an OpenAI key later to enable)'}",
+        f"Voice:   Gemini ({'key set' if a.gemini_api_key else 'NO KEY - she will not start'})",
+        f"Chat:    Groq ({'key set' if a.groq_api_key else 'NO KEY - chat will not start'})",
+        "Memory:  on (runs locally)",
         f"Wake:    {on if a.wake_enabled else off}",
         f"Screen:  {on if a.screen_enabled else off}",
         f"Face:    {on if a.face_enabled else off}",

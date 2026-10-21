@@ -18,8 +18,8 @@ You can list several wake and sleep phrases (comma-separated) so any of them
 works, and change the spoken replies with `KAYLA_WAKE_GREETING` / `KAYLA_WAKE_FAREWELL`.
 
 While asleep, the wake-word model runs entirely on your computer and streams
-**nothing** to OpenAI. There is no cloud cost and nothing to react to until you
-wake it — the whole point of the gate.
+**nothing** to any AI provider. There is no cloud cost and nothing to react to
+until you wake it — the whole point of the gate.
 
 ```
             "Kayla, pay attention"

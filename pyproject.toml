@@ -11,6 +11,7 @@ requires-python = ">=3.11"
 dependencies = [
     "openai>=2,<3",
     "python-dotenv>=1,<2",
+    "fastembed>=0.6,<1",
 ]
 
 [project.optional-dependencies]
@@ -21,7 +22,6 @@ dev = [
 voice = [
     "numpy>=2,<3",
     "opencv-python-headless>=4,<5",
-    "openai[realtime]>=2,<3",
     "google-genai>=1,<2",
     "pvporcupine>=3,<4",
     "sounddevice>=0.5,<1",

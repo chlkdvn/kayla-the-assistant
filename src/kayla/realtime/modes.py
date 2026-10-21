@@ -1,10 +1,11 @@
 """Kayla's spoken behaviour modes: silence, tones, and how to return.
 
 A mode changes HOW she behaves, not what she thinks. Two quiet kinds
-("shutup", "standby") are enforced locally: the session stops feeding the
-model, so no voice hears hers. Tone modes ("serious", "playful", "helpful",
-"work") change her style, and the model itself switches via its own tool while
-the session injects mode directives into each response's instructions.
+("shutup", "standby") are enforced locally: the session stops feeding each
+muted turn's audio out, so no voice hears hers. Tone modes ("serious",
+"playful", "helpful", "work") change her style. The model switches via the
+`set_mode` tool, and the CURRENT MODE directive travels back inside the
+tool's result so she knows exactly how to behave until it changes.
 
 The mode words themselves are an allowlist: full sentences are commands only
 when they parse to a mode, so ordinary speech is never swallowed.

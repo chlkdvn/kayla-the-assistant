@@ -13,8 +13,9 @@ Source history: this project originates from
 - A push-to-talk microphone conversation with an AI-generated spoken reply.
 - A continuous Realtime conversation with automatic turn detection and
   interruption, protected from speaker feedback by PipeWire WebRTC echo cancellation.
-- Multi-turn context using OpenAI's Responses API.
-- Automatic vector-memory recall before every normal Realtime response.
+- Multi-turn context sent with every turn (Groq keeps no server-side state).
+- Automatic vector-memory capture of each turn, plus `remember` / `recall`
+  tools backed by a local embedding model.
 - Optional browser, terminal, and focused-field typing actions in Realtime mode.
 - Continuous voice-to-keyboard typing mode with spoken Enter and exit controls.
 - Kayla's personality stored as a version-controlled prompt.
@@ -25,7 +26,8 @@ Source history: this project originates from
 ## Requirements
 
 - `uv` for Python environment and dependency management.
-- An OpenAI API key with API billing or credits enabled.
+- A free Google Gemini API key (realtime voice) and a free Groq API key (chat,
+  push-to-talk voice, wake greetings).
 - A microphone and speaker recognized by the operating system.
 - PortAudio, which is already installed on this development computer.
 
@@ -41,17 +43,17 @@ Python 3.13 for the project.
    uv sync --extra voice --extra face
    ```
 
-2. Run the setup wizard. It asks for your (free) Gemini key, picks your audio,
-   can download the wake model and writes your `.env`:
+2. Run the setup wizard. It asks for your (free) Gemini and Groq keys, picks
+   your audio, can download the wake model and writes your `.env`:
 
    ```bash
    uv run kayla-setup
    ```
 
    Prefer to do it by hand? Copy `.env.example` to `.env` and fill it in. `.env`
-   is gitignored — never commit or share it. Kayla runs on a **free Google Gemini
-   key alone**; an OpenAI key is optional (only long-term memory and the
-   push-to-talk mode use it).
+   is gitignored — never commit or share it. Both keys are **free**: Gemini
+   serves her realtime voice, Groq serves chat, push-to-talk voice, and wake
+   greetings. Long-term memory runs entirely on this machine (no key).
 
 3. Start talking to her:
 
@@ -59,16 +61,16 @@ Python 3.13 for the project.
    uv run kayla-realtime
    ```
 
-   `uv run kayla` is a typed-chat mode instead (that one needs an OpenAI key).
+   `uv run kayla` is a typed-chat mode instead (also Groq, same key).
 
 ## Sharing Kayla with someone
 
-She's built to run on a fresh machine gracefully: with no camera she just can't see, and with no
-OpenAI key she runs on Gemini alone (long-term memory turns off until a key is
-added). Hand a friend the repo, have them run `uv run kayla-setup`, and she's
-ready. The wizard defaults to safe settings — computer/shell control is **off**
-until they explicitly turn it on. Everything below is Linux-oriented (audio,
-`wtype` typing, Niri desktop actions, serial ports).
+She's built to run on a fresh machine gracefully: with no camera she just can't
+see, and missing optional pieces (wake model, face) simply turn off. Hand a
+friend the repo, have them run `uv run kayla-setup` for the two free keys, and
+she's ready. The wizard defaults to safe settings — computer/shell control is
+**off** until they explicitly turn it on. Everything below is Linux-oriented
+(audio, `wtype` typing, Niri desktop actions, serial ports).
 
 ## Start voice mode
 
@@ -134,12 +136,12 @@ Helpful details:
 ## What happens when you send a message
 
 1. `interfaces/cli.py` reads text from the terminal.
-2. `conversation/session.py` validates the message and remembers the previous
-   OpenAI response ID.
-3. `ai/openai_chat.py` sends the message, Kayla's instructions, and conversation
-   state to the OpenAI Responses API.
-4. The API returns Kayla's answer and a new response ID.
-5. The session stores that ID and the terminal prints the answer.
+2. `conversation/session.py` validates the message and appends it to the
+   conversation history it keeps locally.
+3. `ai/groq_chat.py` sends Kayla's instructions plus the whole history to Groq's
+   chat-completions endpoint (OpenAI-compatible, so the OpenAI SDK talks to it).
+4. The API returns Kayla's answer.
+5. The session stores the exchange and the terminal prints the answer.
 
 This separation mattered when voice was added: the new interface reused the AI
 and conversation modules without changing their responsibilities.
@@ -147,9 +149,10 @@ and conversation modules without changing their responsibilities.
 ## What happens during a voice turn
 
 1. `voice/microphone.py` captures 16-bit microphone samples and creates a WAV.
-2. `voice/openai_transcriber.py` turns that recording into text.
+2. `voice/groq_transcriber.py` turns that recording into text (Whisper on Groq).
 3. The existing `ConversationSession` sends the text to Kayla's AI brain.
-4. `voice/openai_speech.py` turns Kayla's text answer into an AI-generated WAV.
+4. `voice/groq_speech.py` turns Kayla's text answer into an AI-generated WAV
+   (long replies are chunked to fit Groq's 200-character TTS limit).
 5. `voice/speaker.py` plays that WAV through the computer speaker.
 
 Every intermediate result remains visible, which makes this first voice version
@@ -157,10 +160,11 @@ easier to learn and debug. See [the voice guide](docs/voice.md) for details.
 
 ## What happens during a realtime turn
 
-1. The microphone continuously produces small 24 kHz PCM chunks.
-2. `realtime/session.py` sends each chunk over one persistent WebSocket.
-3. Server voice-activity detection decides when you started and stopped talking.
-4. The Realtime model responds directly with incremental PCM audio chunks.
+1. The microphone continuously produces small 16 kHz PCM chunks.
+2. `realtime/gemini_session.py` sends each chunk over one persistent Gemini Live
+   session.
+3. Server-side activity detection decides when you started and stopped talking.
+4. Gemini responds directly with incremental PCM audio chunks.
 5. `realtime/audio.py` places each chunk into the speaker buffer immediately.
 6. If you speak during playback, unplayed audio is cleared and the unheard part
    of Kayla's answer is removed from conversation state.
@@ -180,12 +184,12 @@ run commands, or type into a field you focus.
 │   ├── system.md              # Browser, terminal, and focused-field actions
 │   └── voice.md               # Push-to-talk flow and troubleshooting
 ├── src/kayla/
-│   ├── ai/                    # AI contract and OpenAI implementation
+│   ├── ai/                    # AI contract and Groq implementation
 │   ├── config/                # Environment-based settings
 │   ├── conversation/          # Provider-independent session logic
 │   ├── interfaces/            # Typed and voice terminal interfaces
 │   ├── prompts/               # Kayla's personality and behavioral rules
-│   ├── realtime/              # WebSocket session and full-duplex PCM audio
+│   ├── realtime/              # Gemini Live session and full-duplex PCM audio
 │   ├── system/                # Browser, shell, terminal, and keyboard adapters
 │   ├── voice/                 # Recording, transcription, speech, and playback
 │   └── app.py                 # Connects the typed-chat modules

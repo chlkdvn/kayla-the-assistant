@@ -58,8 +58,13 @@ class MemoryStore:
         return recalled
 
     def _recall_vector(self, query_vector: list[float], k: int | None = None) -> list[str]:
+        # Vectors from a different embedding model have the wrong width and can
+        # never match, so they are skipped instead of compared nonsense-to-nonsense.
+        compatible = [
+            memory for memory in self._memories if len(memory.embedding) == len(query_vector)
+        ]
         ranked = sorted(
-            self._memories,
+            compatible,
             key=lambda memory: _cosine_similarity(query_vector, memory.embedding),
             reverse=True,
         )
