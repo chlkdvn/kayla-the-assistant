@@ -26,8 +26,15 @@ from kayla.realtime.events import RealtimeDisplayEvent
 from kayla.realtime.gemini_tools import gemini_tools
 from kayla.realtime.modes import DEFAULT_MODE, QUIET_MODES, mode_directive, parse_mode
 from kayla.realtime.options import (
+    BRING_WINDOW_TOOL_NAME,
+    CLOSE_WINDOW_TOOL_NAME,
+    FOCUS_MODE_TOOL_NAME,
     LOOK_TOOL_NAME,
+    MOVE_ORB_TOOL_NAME,
+    OPEN_APP_TOOL_NAME,
     OPEN_URL_TOOL_NAME,
+    PERFORMANCE_MODE_TOOL_NAME,
+    PHONE_FOCUS_TOOL_NAME,
     PRESS_KEY_TOOL_NAME,
     RECALL_TOOL_NAME,
     REMEMBER_TOOL_NAME,
@@ -37,8 +44,10 @@ from kayla.realtime.options import (
     SET_FEELING_TOOL_NAME,
     SET_MODE_TOOL_NAME,
     SET_VISION_TOOL_NAME,
+    SPLIT_SCREEN_TOOL_NAME,
     START_TYPE_MODE_TOOL_NAME,
     SWIPE_DESKTOP_TOOL_NAME,
+    SYSTEM_STATUS_TOOL_NAME,
     TYPE_TEXT_TOOL_NAME,
     WEB_SEARCH_TOOL_NAME,
     RealtimeSessionOptions,
@@ -94,6 +103,13 @@ class GeminiVoiceSession:
         keyboard: Keyboard | None = None,
         echo_canceller: PulseEchoCanceller | None = None,
         face: Any | None = None,
+        monitor: Any | None = None,
+        apps: Any | None = None,
+        windows: Any | None = None,
+        tiler: Any | None = None,
+        focus_mode: Any | None = None,
+        performance_mode: Any | None = None,
+        devices: Any | None = None,
     ) -> None:
         self._api_key = api_key
         self._model = model
@@ -126,6 +142,14 @@ class GeminiVoiceSession:
         self._keyboard = keyboard
         self._echo_canceller = echo_canceller
         self._face = face
+        self._monitor = monitor
+        self._apps = apps
+        self._windows = windows
+        self._tiler = tiler
+        self._focus_mode = focus_mode
+        self._performance_mode = performance_mode
+        self._devices = devices
+        self._startup_done = False
         self._session: Any | None = None
         self._user_buf = ""
         self._assistant_buf = ""
@@ -229,6 +253,7 @@ class GeminiVoiceSession:
                         else "Reconnected — keep going.",
                     )
                     first = False
+                    self._spawn(self._startup_question(session))
                     async with asyncio.TaskGroup() as tasks:
                         tasks.create_task(self._send_microphone(session))
                         tasks.create_task(self._receive_events(session))
@@ -245,6 +270,43 @@ class GeminiVoiceSession:
                     raise
                 self._emit("connected", "Connection dropped — reconnecting...")
                 await asyncio.sleep(0.6)
+
+    async def _startup_question(self, session: Any) -> None:
+        """Ask how to start via the orb's chips, then act on the choice directly.
+
+        The chips are local actions (mode/notifications/power) so an offline
+        click still does the real thing; the conversation proceeds naturally on
+        the already-open Live session.
+        """
+        ask = getattr(self._face, "ask", None)
+        if not callable(ask) or self._startup_done:
+            return
+        message = getattr(self._face, "message", None)
+        await asyncio.sleep(0.6)  # let the greeting audio start first
+        try:
+            choice = await asyncio.to_thread(
+                ask,
+                "How should we start?",
+                ["Work mode", "Focus mode", "Best performance", "All good"],
+            )
+        except Exception:  # noqa: BLE001 - a stuck orb must never stall the chat
+            return
+        self._startup_done = True
+        _ = session  # kept for symmetry; no model turn is needed for chip actions
+        if choice is None:  # dismissed or timed out: do nothing silently
+            return
+        outcome: str
+        if choice == 0:
+            self._set_mode("work")
+            outcome = "Work mode on - let's get into it."
+        elif choice == 1:
+            outcome = await self._apply_focus_mode("on")
+        elif choice == 2:
+            outcome = await self._apply_performance_mode("performance")
+        else:
+            outcome = "As you like."
+        if callable(message):
+            message(outcome[:80])
 
     def _reset_turn(self) -> None:
         """Clear per-turn state so a reconnect starts clean."""
@@ -492,6 +554,24 @@ class GeminiVoiceSession:
             return self._start_type_mode(), None
         if name == SWIPE_DESKTOP_TOOL_NAME:
             return await self._swipe_desktop(self._arg(args, "direction")), None
+        if name == SYSTEM_STATUS_TOOL_NAME:
+            return await self._system_status(), None
+        if name == OPEN_APP_TOOL_NAME:
+            return await self._open_app(self._arg(args, "name")), None
+        if name == CLOSE_WINDOW_TOOL_NAME:
+            return await self._close_window(self._arg(args, "target")), None
+        if name == BRING_WINDOW_TOOL_NAME:
+            return await self._bring_window(self._arg(args, "target")), None
+        if name == SPLIT_SCREEN_TOOL_NAME:
+            return await self._split_screen(self._arg(args, "count")), None
+        if name == FOCUS_MODE_TOOL_NAME:
+            return await self._apply_focus_mode(self._arg(args, "enabled")), None
+        if name == PERFORMANCE_MODE_TOOL_NAME:
+            return await self._apply_performance_mode(self._arg(args, "profile")), None
+        if name == MOVE_ORB_TOOL_NAME:
+            return await self._move_orb(self._arg(args, "position")), None
+        if name == PHONE_FOCUS_TOOL_NAME:
+            return await self._phone_focus(self._arg(args, "enabled")), None
         return "I don't have that tool.", None
 
     @staticmethod
@@ -518,6 +598,7 @@ class GeminiVoiceSession:
         mode = mode.strip().lower()
         valid = {"shutup", "standby", "speak", "serious", "playful", "helpful", "work"}
         self._mode = mode if mode in valid else "speak"
+        self._sync_orb_energy()
         self._emit("acted", f"Mode: {self._mode}")
         directive = mode_directive(self._mode)
         enforcement = (
@@ -525,6 +606,16 @@ class GeminiVoiceSession:
             "speak again - stay in this mode until it changes."
         )
         return directive + enforcement
+
+    def _sync_orb_energy(self) -> None:
+        """Mirror modes onto the orb: quiet = sleeping, others = listening."""
+        set_mood = getattr(self._face, "set_mood", None)
+        if not callable(set_mood):
+            return
+        if self._mode in QUIET_MODES:
+            set_mood("sleeping")
+        elif self._mode == "speak":
+            set_mood("listening")
 
     def _set_vision(self, enabled: str) -> str:
         """Turn the camera on or off at the user's request, releasing it when off."""
@@ -622,6 +713,96 @@ class GeminiVoiceSession:
             self._emit("acted", output)
             return output
         return "Desktop swiping is turned off."
+
+    async def _system_status(self) -> str:
+        if self._monitor is None:
+            return "Computer monitoring is turned off."
+        try:
+            summary = await asyncio.to_thread(self._monitor.describe)
+        except Exception as error:  # noqa: BLE001 - monitoring must not break chat
+            return f"The computer check failed ({error})."
+        self._emit("acted", "Read the laptop's status.")
+        return summary
+
+    async def _open_app(self, name: str) -> str:
+        if self._apps is None or not name:
+            return "Opening apps is turned off."
+        output = await asyncio.to_thread(self._apps.open, name)
+        self._emit("acted", output)
+        return output
+
+    async def _close_window(self, target: str) -> str:
+        if self._windows is None or not target:
+            return "Closing windows is turned off."
+        output = await asyncio.to_thread(self._windows.close, target)
+        self._emit("acted", output)
+        return output
+
+    async def _bring_window(self, target: str) -> str:
+        if self._windows is None or not target:
+            return "Window focusing is turned off."
+        output = await asyncio.to_thread(self._windows.activate, target)
+        self._emit("acted", output)
+        return output
+
+    async def _split_screen(self, count: str) -> str:
+        if self._tiler is None:
+            return "Screen splitting is turned off."
+        try:
+            slots = int(count)
+        except ValueError:
+            return "How many slots did they want? Count must be a number (2, 3, 4, or 6)."
+        output = await asyncio.to_thread(self._tiler.split, slots)
+        self._emit("acted", output)
+        return output
+
+    async def _apply_focus_mode(self, enabled: str) -> str:
+        if self._focus_mode is None:
+            return "Focus control is turned off."
+        enter = enabled.strip().lower() != "off"
+        if enter:
+            output = await asyncio.to_thread(self._focus_mode.on)
+        else:
+            output = await asyncio.to_thread(self._focus_mode.off)
+        self._emit("acted", output)
+        return output
+
+    async def _apply_performance_mode(self, profile: str) -> str:
+        if self._performance_mode is None:
+            return "Power profiles are turned off."
+        output = await asyncio.to_thread(self._performance_mode.set, profile or "balanced")
+        self._emit("acted", output)
+        return output
+
+    async def _move_orb(self, position: str) -> str:
+        mover = getattr(self._face, "move_to", None)
+        if not callable(mover) or not position:
+            return "My orb window isn't connected, so I can't move myself."
+        moved = await asyncio.to_thread(mover, position.strip())
+        if moved:
+            self._emit("acted", f"Moved to {position.strip()}.")
+            return f"Moved to {position.strip()}."
+        return "I couldn't move there - use spots like left, right, center, top_left."
+
+    async def _phone_focus(self, enabled: str) -> str:
+        if self._devices is None:
+            return "The phone bridge is turned off."
+        on = enabled.strip().lower() != "off"
+        action = "focus_on" if on else "focus_off"
+        devices = self._devices.devices()
+        if not devices:
+            return (
+                "No phone is paired yet. They can pair one with the Shortcut in "
+                "docs/devices.md, then ask me again."
+            )
+        command_id = self._devices.attach({"action": action})
+        for device in devices:
+            _ = device  # broadcast commands reach every paired device
+        self._emit("acted", f"Queued phone focus {action} ({command_id}).")
+        return (
+            f"Queued focus {'ON' if on else 'OFF'} for {len(devices)} paired phone(s); "
+            "it applies the next time the phone's shortcut checks in."
+        )
 
     def _start_type_mode(self) -> str:
         """Switch later speech turns from spoken replies to direct typing."""

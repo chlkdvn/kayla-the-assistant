@@ -12,6 +12,7 @@ dependencies = [
     "openai>=2,<3",
     "python-dotenv>=1,<2",
     "fastembed>=0.6,<1",
+    "psutil>=7.2.2",
 ]
 
 [project.optional-dependencies]
@@ -36,6 +37,8 @@ kayla-setup = "kayla.setup.cli:main"
 kayla-realtime = "kayla.interfaces.realtime_cli:main"
 kayla-voice = "kayla.interfaces.voice_cli:main"
 kayla-face = "kayla.face.app:main"
+kayla-orb = "kayla.orb.app:main"
+kayla-boot = "kayla.setup.boot:main"
 kayla-seed-memory = "kayla.memory.seed_memories:main"
 
 [tool.hatch.build.targets.wheel]

@@ -49,6 +49,11 @@ _EXACT_WORDS: dict[str, str] = {
     "work mode": "work",
     "get to work": "work",
     "focus": "work",
+    "stop listening": "shutup",
+    "stop hearing me": "shutup",
+    "listen again": "speak",
+    "start listening": "speak",
+    "listen to me": "speak",
 }
 
 _NAME_PREFIX = re.compile(r"\b(?:kayla|nova)\b[,: ]+", flags=re.IGNORECASE)

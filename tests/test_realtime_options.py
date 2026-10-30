@@ -23,12 +23,78 @@ def test_tool_specs_offer_the_look_tool_when_vision_is_enabled() -> None:
 def test_tool_specs_always_include_at_least_the_mode_tool() -> None:
     options = _options(
         KAYLA_VISION_ENABLED="false",
+        KAYLA_SCREEN_ENABLED="false",
         KAYLA_MEMORY_ENABLED="false",
         KAYLA_BROWSER_ENABLED="false",
         KAYLA_SHELL_ENABLED="false",
+        KAYLA_FACE_ENABLED="false",
+        KAYLA_SYSTEM_TOOLS_ENABLED="false",
+        KAYLA_ORB_ENABLED="false",
+        KAYLA_DEVICES_ENABLED="false",
     )
 
     assert [tool["name"] for tool in options.tool_specs()] == ["set_mode"]
+
+
+def test_tool_specs_should_default_the_machine_tools_on() -> None:
+    # New ownership defaults: laptop control, orb, and phone bridge ship enabled.
+    names = {tool["name"] for tool in _options().tool_specs()}
+
+    assert {
+        "system_status",
+        "open_app",
+        "close_window",
+        "bring_window",
+        "split_screen",
+        "focus_mode",
+        "performance_mode",
+        "move_orb",
+        "phone_focus",
+    } <= names
+
+
+def test_tool_specs_gates_system_tools_by_flag() -> None:
+    off = _options(KAYLA_SYSTEM_TOOLS_ENABLED="false")
+
+    names = {tool["name"] for tool in off.tool_specs()}
+
+    assert "system_status" not in names
+    assert "open_app" not in names
+    assert "close_window" not in names
+    assert "bring_window" not in names
+    assert "split_screen" not in names
+    assert "focus_mode" not in names
+    assert "performance_mode" not in names
+
+
+def test_bring_window_tool_promises_last_used_pick() -> None:
+    options = _options()
+    tool = next(tool for tool in options.tool_specs() if tool["name"] == "bring_window")
+
+    description = tool["description"].lower()
+    assert "already-open" in description
+    assert "most recently" in description
+
+
+def test_tool_specs_gates_orb_and_phone_tools_by_flags() -> None:
+    off_names = {
+        tool["name"]
+        for tool in _options(
+            KAYLA_ORB_ENABLED="false",
+            KAYLA_DEVICES_ENABLED="false",
+        ).tool_specs()
+    }
+    on_names = {
+        tool["name"]
+        for tool in _options(
+            KAYLA_ORB_ENABLED="true",
+            KAYLA_DEVICES_ENABLED="true",
+        ).tool_specs()
+    }
+
+    assert "move_orb" not in off_names
+    assert "phone_focus" not in off_names
+    assert {"move_orb", "phone_focus"} <= on_names
 
 
 def test_tool_specs_offer_browser_tools_when_enabled() -> None:

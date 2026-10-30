@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import threading
+from array import array
 from dataclasses import dataclass
 from typing import Any
 
@@ -12,6 +14,41 @@ import sounddevice as sd
 from kayla.realtime.options import REALTIME_SAMPLE_RATE
 
 SAMPLE_WIDTH_BYTES = 2
+
+INT16_MAX = 32767
+# Loud peaks were harsh and clipped on the laptop speakers, so playback is
+# tamed: everything below the knee only gets the gain, everything above is
+# soft-limited so the waveform bends toward the ceiling instead of squaring
+# off. The ceiling sits below int16 max, so full-scale audio cannot blast.
+SOFT_KNEE = int(0.80 * INT16_MAX)
+DEFAULT_SPEAKER_CEILING = int(0.93 * INT16_MAX)
+
+
+def tame_speaker_audio(
+    audio: bytes, gain: float = 1.0, *, ceiling: float = DEFAULT_SPEAKER_CEILING
+) -> bytes:
+    """Volume-trim int16 PCM by ``gain`` and soft-limit the remaining peaks.
+
+    Samples below the knee come through unchanged apart from the gain; louder
+    shapes get compressed progressively (tanh knee), so the output never
+    exceeds ``ceiling`` +/- sign and nothing squares off. A truncated final
+    sample (odd byte count) yields no output for those bytes.
+    """
+    if not audio:
+        return audio
+    samples = array("h")
+    samples.frombytes(audio[: len(audio) - len(audio) % 2])
+    budget = max(1, ceiling - SOFT_KNEE)
+    out = array("h", samples)
+    for index, value in enumerate(samples):
+        scaled = value * gain
+        if -SOFT_KNEE <= scaled <= SOFT_KNEE:
+            out[index] = int(scaled)
+            continue
+        magnitude, sign = abs(scaled), (1 if scaled > 0 else -1)
+        bent = SOFT_KNEE + budget * math.tanh((magnitude - SOFT_KNEE) / budget)
+        out[index] = sign * int(bent)
+    return out.tobytes()
 
 
 class StreamingMicrophone:
@@ -157,11 +194,13 @@ class StreamingSpeaker:
         block_duration_ms: int = 20,
         device: str | None = None,
         playback_buffer: PcmPlaybackBuffer | None = None,
+        gain: float = 1.0,
     ) -> None:
         self._sample_rate = sample_rate
         self._block_size = sample_rate * block_duration_ms // 1000
         self._device = device
         self._buffer = playback_buffer or PcmPlaybackBuffer(sample_rate=sample_rate)
+        self._gain = gain
         self._stream: Any | None = None
 
     def start(self) -> None:
@@ -176,7 +215,8 @@ class StreamingSpeaker:
             _status: Any,
         ) -> None:
             audio = self._buffer.read(len(output_data))
-            output_data[:] = audio + bytes(len(output_data) - len(audio))
+            tamed = tame_speaker_audio(audio, self._gain)
+            output_data[:] = tamed + bytes(len(output_data) - len(tamed))
 
         self._stream = sd.RawOutputStream(
             samplerate=self._sample_rate,

@@ -122,7 +122,17 @@ def _done() -> Any:
 
 
 def _build_session(
-    face: FakeFace, on_event: Any, camera: Any = None, screen: Any = None
+    face: FakeFace,
+    on_event: Any,
+    camera: Any = None,
+    screen: Any = None,
+    monitor: Any = None,
+    apps: Any = None,
+    windows: Any = None,
+    tiler: Any = None,
+    focus_mode: Any = None,
+    performance_mode: Any = None,
+    devices: Any = None,
 ) -> GeminiVoiceSession:
     settings = Settings.from_mapping({"GROQ_API_KEY": "x"})
     options = RealtimeSessionOptions.from_settings(settings)
@@ -138,6 +148,13 @@ def _build_session(
         camera=camera,
         screen=screen,
         face=face,
+        monitor=monitor,
+        apps=apps,
+        windows=windows,
+        tiler=tiler,
+        focus_mode=focus_mode,
+        performance_mode=performance_mode,
+        devices=devices,
     )
 
 
@@ -321,3 +338,261 @@ def test_quiet_mode_suppresses_audio_until_speak_is_heard() -> None:
 
     assert queue == [b"\x00\x00"]  # audio reopened, she speaks again
     assert session._mode == "speak"
+
+
+# --------------------------------------------------- laptop-awareness handlers
+
+
+class FakeMonitor:
+    def __init__(self) -> None:
+        self.described = 0
+
+    def describe(self) -> str:
+        self.described += 1
+        return "RAM 5.2GB; CPU 12%; battery 80%; chromium + code open"
+
+
+class FakeApps:
+    def __init__(self) -> None:
+        self.opened: list[str] = []
+
+    def open(self, query: str) -> str:
+        self.opened.append(query)
+        return f"Opening {query}."
+
+
+class FakeWindows:
+    def __init__(self) -> None:
+        self.closed: list[str] = []
+
+    def close(self, target: str) -> str:
+        self.closed.append(target)
+        return f"Closed 1 window ({target})."
+
+
+class FakeTiler:
+    def __init__(self) -> None:
+        self.slots: list[int] = []
+
+    def split(self, count: int) -> str:
+        self.slots.append(count)
+        return f"Tiled into {count} slots."
+
+
+class FakeFocus:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def on(self) -> str:
+        self.calls.append("on")
+        return "Notifications off."
+
+    def off(self) -> str:
+        self.calls.append("off")
+        return "Notifications back on."
+
+
+class FakePower:
+    def __init__(self) -> None:
+        self.profiles: list[str] = []
+
+    def set(self, profile: str) -> str:
+        self.profiles.append(profile)
+        return f"Power profile: {profile}."
+
+
+class FakeBridge:
+    def __init__(self) -> None:
+        self.attached: list[dict[str, str]] = []
+
+    def devices(self) -> list[Any]:
+        return [NS(name="Divine's iPhone")]
+
+    def attach(self, action: dict[str, str]) -> str:
+        self.attached.append(action)
+        return "cmd-7"
+
+
+class FakeMovableFace:
+    def __init__(self) -> None:
+        self.spots: list[str] = []
+
+    def set_mood(self, feeling: str) -> None: ...  # ignore mood calls here
+
+    def move_to(self, label: str) -> bool:
+        self.spots.append(label)
+        return True
+
+
+def test_system_status_runs_inside_a_live_turn() -> None:
+    monitor = FakeMonitor()
+    face = FakeFace()
+    session = _build_session(face, lambda _e: None, monitor=monitor)
+    live = FakeLiveSession([[_tool("system_status", {}), _say("Busy?"), _done()]])
+    session._session = live
+
+    with pytest.raises(_Stop):
+        asyncio.run(session._receive_events(live))
+
+    assert monitor.described == 1
+    entry = live.tool_responses[0][0]
+    assert entry.name == "system_status"
+    assert "RAM 5.2GB" in entry.response["result"]  # the model reads the real numbers
+
+
+def test_open_app_and_close_window_handlers() -> None:
+    apps, windows = FakeApps(), FakeWindows()
+    session = _build_session(FakeFace(), lambda _e: None, apps=apps, windows=windows)
+
+    opened = asyncio.run(session._open_app("spotify"))
+    closed = asyncio.run(session._close_window("chrome"))
+
+    assert apps.opened == ["spotify"]
+    assert "Opening" in opened
+    assert windows.closed == ["chrome"]
+    assert "Closed" in closed
+
+
+def test_split_screen_passes_the_count() -> None:
+    tiler = FakeTiler()
+    session = _build_session(FakeFace(), lambda _e: None, tiler=tiler)
+
+    text = asyncio.run(session._split_screen("4"))
+
+    assert tiler.slots == [4]
+    assert "4" in text
+
+
+def test_focus_and_power_handlers_actuate_the_laptop() -> None:
+    focus, power = FakeFocus(), FakePower()
+    session = _build_session(FakeFace(), lambda _e: None, focus_mode=focus, performance_mode=power)
+
+    on_text = asyncio.run(session._apply_focus_mode("on"))
+    off_text = asyncio.run(session._apply_focus_mode("off"))
+    power_text = asyncio.run(session._apply_performance_mode("performance"))
+
+    assert focus.calls == ["on", "off"]
+    assert "Notifications" in on_text and "back on" in off_text
+    assert power.profiles == ["performance"]
+    assert "performance" in power_text
+
+
+def test_handlers_degrade_when_the_tool_is_not_provided() -> None:
+    session = _build_session(FakeFace(), lambda _e: None)
+
+    assert asyncio.run(session._system_status()) == "Computer monitoring is turned off."
+    assert asyncio.run(session._open_app("spotify")) == "Opening apps is turned off."
+    assert asyncio.run(session._split_screen("4")) == "Screen splitting is turned off."
+    assert asyncio.run(session._apply_focus_mode("on")) == "Focus control is turned off."
+    assert (
+        asyncio.run(session._apply_performance_mode("power-saver"))
+        == "Power profiles are turned off."
+    )
+    assert asyncio.run(session._close_window("chrome")) == "Closing windows is turned off."
+    assert asyncio.run(session._phone_focus("on")) == "The phone bridge is turned off."
+
+
+def test_move_orb_instructs_the_client() -> None:
+    face = FakeMovableFace()
+    session = _build_session(face, lambda _e: None)
+
+    text = asyncio.run(session._move_orb("left"))
+
+    assert face.spots == ["left"]
+    assert "Moved to left" in text
+
+
+def test_move_orb_needs_a_running_window() -> None:
+    session = _build_session(FakeFace(), lambda _e: None)  # FakeFace has no move_to
+
+    text = asyncio.run(session._move_orb("left"))
+
+    assert "isn't connected" in text
+
+
+def test_phone_focus_queues_the_command_and_admits_the_delay() -> None:
+    bridge = FakeBridge()
+    session = _build_session(FakeFace(), lambda _e: None, devices=bridge)
+
+    text = asyncio.run(session._phone_focus("on"))
+
+    assert bridge.attached == [{"action": "focus_on"}]
+    assert "next" in text.lower()  # honest about when the phone applies it
+
+
+def test_phone_focus_without_devices_says_so() -> None:
+    class EmptyBridge:
+        def devices(self) -> list[Any]:
+            return []
+
+    session = _build_session(FakeFace(), lambda _e: None, devices=EmptyBridge())
+
+    text = asyncio.run(session._phone_focus("on"))
+
+    assert "No phone is paired" in text
+
+
+def test_quiet_mode_sets_the_orb_to_sleeping() -> None:
+    face = FakeFace()
+    session = _build_session(face, lambda _e: None)
+
+    session._set_mode("shutup")
+    session._set_mode("speak")
+
+    assert face.feelings == ["sleeping", "listening"]
+
+
+# ------------------------------------------------------- startup chip question
+
+
+class FakeChipFace:
+    """An orb client stand-in: blocks in ask(), records the shown message."""
+
+    def __init__(self, answer: int | None) -> None:
+        self._answer = answer
+        self.titles: list[str] = []
+        self.messages: list[str] = []
+
+    def ask(self, title: str, options: list[str], timeout: float = 300.0) -> int | None:
+        self.titles.append(title)
+        self._options = options
+        return self._answer
+
+    def message(self, text: str) -> None:
+        self.messages.append(text)
+
+    def set_mood(self, feeling: str) -> None: ...
+
+
+def test_startup_chips_actuate_only_the_chosen_action() -> None:
+    face = FakeChipFace(answer=1)  # "Focus mode"
+    focus, power = FakeFocus(), FakePower()
+    session = _build_session(face, lambda _e: None, focus_mode=focus, performance_mode=power)
+
+    asyncio.run(session._startup_question(None))
+
+    assert focus.calls == ["on"]  # notifications silenced
+    assert power.profiles == []  # performance was NOT touched
+    assert any("Notifications" in message for message in face.messages)
+
+
+def test_startup_chips_dismissed_actuates_nothing() -> None:
+    face = FakeChipFace(answer=None)
+    focus, power = FakeFocus(), FakePower()
+    session = _build_session(face, lambda _e: None, focus_mode=focus, performance_mode=power)
+
+    asyncio.run(session._startup_question(None))
+
+    assert focus.calls == []
+    assert power.profiles == []
+    assert face.messages == []
+
+
+def test_startup_chips_run_only_once_per_session() -> None:
+    face = FakeChipFace(answer=3)
+    session = _build_session(face, lambda _e: None, focus_mode=FakeFocus())
+
+    asyncio.run(session._startup_question(None))
+    asyncio.run(session._startup_question(None))  # no reconnect happened between these
+
+    assert len(face.titles) == 1  # never asks the same start question twice

@@ -1,25 +1,56 @@
-"""The local embedder turns text into a vector with an injected model."""
+"""The embedding model must live in the home cache, not /tmp.
+
+``/tmp`` is wiped on reboot: a model cached there would be re-downloaded -
+and re-paid over a phone tether - on every restart. These tests pin the
+cache location without touching the real fastembed package or the network.
+"""
 
 from __future__ import annotations
 
-from kayla.memory.fastembed_embedder import FastEmbedEmbedder
+import sys
+import types
+from pathlib import Path
+
+from kayla.memory import fastembed_embedder
 
 
-class FakeTextEmbedding:
-    def __init__(self) -> None:
-        self.calls: list[list[str]] = []
+class _RecordingTextEmbedding:
+    """Stands in for fastembed.TextEmbedding and records how it was built."""
 
-    def embed(self, texts: list[str]) -> list[list[float]]:
-        self.calls.append(texts)
-        return [[0.1, 0.2, 0.3]]
+    last_kwargs: dict[str, object] | None = None
+
+    def __init__(self, **kwargs: object) -> None:
+        _RecordingTextEmbedding.last_kwargs = kwargs
+
+    def embed(self, texts: list[str]):
+        return iter([[0.1, 0.2] for _ in texts])
 
 
-def test_embedder_calls_the_model_and_returns_plain_floats() -> None:
-    model = FakeTextEmbedding()
-    embedder = FastEmbedEmbedder(model_name="test-model", model=model)
+def test_embedder_uses_the_persistent_home_cache(monkeypatch):
+    module = types.ModuleType("fastembed")
+    module.TextEmbedding = _RecordingTextEmbedding
+    monkeypatch.setitem(sys.modules, "fastembed", module)
 
-    vector = embedder.embed("hello there")
+    fastembed_embedder.FastEmbedEmbedder()
 
-    assert vector == [0.1, 0.2, 0.3]
-    assert all(isinstance(value, float) for value in vector)
-    assert model.calls == [["hello there"]]
+    kwargs = _RecordingTextEmbedding.last_kwargs
+    assert kwargs is not None
+    cached = Path(str(kwargs["cache_dir"]))
+    assert cached == fastembed_embedder.home_cache_dir()
+    assert cached.parts[1] != "tmp"  # relocated out of /tmp for good
+
+
+def test_explicit_cache_dir_wins(monkeypatch):
+    module = types.ModuleType("fastembed")
+    module.TextEmbedding = _RecordingTextEmbedding
+    monkeypatch.setitem(sys.modules, "fastembed", module)
+
+    fastembed_embedder.FastEmbedEmbedder(cache_dir="/somewhere/else")
+
+    assert _RecordingTextEmbedding.last_kwargs["cache_dir"] == "/somewhere/else"
+
+
+def test_embed_returns_plain_floats():
+    embedder = fastembed_embedder.FastEmbedEmbedder(model=_RecordingTextEmbedding())
+
+    assert embedder.embed("hello") == [0.1, 0.2]

@@ -84,6 +84,29 @@ to Niri's native column-navigation actions, with fixed `Super+Left` and
 logic calls these adapters through injected objects; it does not depend on
 subprocess or desktop-tool details.
 
+The same boundary now owns **whole-laptop awareness and control**:
+
+- `system/monitor.py` — `SystemMonitor`, real RAM/CPU/load/battery via `psutil`
+  plus the open-window list via `wmctrl -l -x`; `describe` produces the numbers
+  the model must read instead of guessing.
+- `system/apps.py` — `DesktopApps`, launch any installed desktop app by fuzzy
+  name through the desktop launcher (`.desktop` registry).
+- `system/windowctl.py` — `WindowControl`, gracefully close or raise windows by
+  app/title words with `wmctrl`.
+- `system/tiler.py` — `WindowTiler`, tile visible windows into 2/3/4/6 slots on
+  the work area read from `wmctrl -d`.
+- `system/focus.py` — `FocusMode`, silence/restore GNOME notifications with
+  `gsettings`, remembering the previous values.
+- `system/performance.py` — `PerformanceMode`, switch power profiles through
+  `powerprofilesctl`.
+- `system/session_exit.py` — `close_calling_terminal`: the shell-ancestor walk
+  that lets the `kayla` pop-out command close the terminal it was typed in
+  (never killing pid 1, never closing an unsaved editor).
+
+These are enabled together with `KAYLA_SYSTEM_TOOLS_ENABLED` (default *true*)
+and each tool degrades to a spoken "X is not installed" when a helper is
+missing. See `docs/system.md` for the per-tool detail.
+
 Continuous typing mode remains inside the Realtime boundary. The model only starts
 the mode; after that, `realtime/dictation.py` converts completed transcripts into
 text plus the allowlisted Enter/exit controls. The session temporarily disables
@@ -163,10 +186,63 @@ was not played and the session reports that Kayla stopped to listen. Because the
 model hears the interruption itself - it is a single full-duplex session - its
 next response already reflects what the user actually heard.
 
+## The orb boundary
+
+`orb/` is Kayla's floating 3D presence: a small always-on-top pygame-ce window
+with a software-rendered particle orb, a message band, and tap-able choice
+chips. It replaces the 2D face in realtime mode (`face/` remains intact for the
+forced-off case).
+
+- `orb/state.py` — pure `OrbState`, energy mapping, slot/snap geometry and
+  position persistence (no pygame imports needed for the logic).
+- `orb/render.py` — the renderer: fibonacci-sphere rings, glowing core,
+  message/question band layout.
+- `orb/app.py` — the window process: event loop, drag, snap, protocol server
+  (`handle_line`, `handle_connection`) and the two-step `ask` flow.
+- `orb/client.py` — `OrbClient`: the brain's half of the line protocol.
+- `orb/window.py` — `open_orb_window`: start detached, connect the client.
+
+Ownership rules: everything touching the window (moving, focusing) happens on
+the window thread through queued actions; the protocol is plain lines on
+127.0.0.1; SIGINT/SIGTERM are handled explicitly because SDL swallows them. See
+`docs/orb.md` for the full protocol and lifecycle.
+
+The realtime session's startup chips ride this channel: on first connect the
+session asks "How should we start?" over the orb and applies Work mode,
+focus mode, or the performance profile locally - no model turn needed.
+
+## The devices boundary
+
+`devices/bridge.py` is the LAN bridge between Kayla and a paired phone:
+pair-code exchange, per-device tokens, a persisted command queue
+(`focus_on`/`focus_off`), acknowledgements, and one-line notes. The phone -
+not Kayla - performs Focus changes through its own Shortcut, polling
+`GET /commands`; commands therefore apply at the phone's next check-in, which
+the instructions make Kayla admit. The bridge starts with realtime mode
+(`KAYLA_DEVICES_*`) and never blocks anything else when it cannot bind. See
+`docs/devices.md` for the shortcut recipe.
+
+## The boot boundary
+
+`setup/boot.py` installs autostart for the user session (no root): a systemd
+user unit that starts the realtime session with the graphical session, and a
+desktop entry so "kayla" in GNOME search raises her orb. Installer commands are
+runner-injected for tests; `--install`, `--remove`, `--status` drive it.
+
+## Interfaces boundary
+
+`interfaces/cli.py` is the pop-out front door: bare `kayla` spawns the
+detached realtime brain, focuses an already-running orb instead of making a
+twin, then closes the calling terminal via `system/session_exit.py`.
+`kayla --chat` keeps the classic typed conversation; `interfaces/realtime_cli.py`
+only renders status and transcripts for the voice session.
+
 ## Milestones
 
 1. Text chat on the computer. **Complete.**
 2. Push-to-talk microphone and speaker flow. **Complete.**
 3. Natural realtime voice conversation. **Complete.**
 4. Wake-word attention gate and on-screen face. **Complete.**
-5. Raspberry Pi deployment.
+5. Floating orb pop-out, laptop awareness and control, phone focus bridge,
+   boot autostart. **Complete.**
+6. Raspberry Pi deployment.

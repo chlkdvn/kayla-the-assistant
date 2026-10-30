@@ -290,6 +290,179 @@ _RECALL_TOOL = {
     },
 }
 
+SYSTEM_STATUS_TOOL_NAME = "system_status"
+_SYSTEM_STATUS_TOOL = {
+    "type": "function",
+    "name": SYSTEM_STATUS_TOOL_NAME,
+    "description": (
+        "Read the state of THEIR COMPUTER: RAM use, CPU, battery, and every app with "
+        "an open window. Call this before answering anything about what is open, "
+        "running, or how busy their laptop is - never guess those answers."
+    ),
+    "parameters": {"type": "object", "properties": {}, "required": []},
+}
+
+OPEN_APP_TOOL_NAME = "open_app"
+_OPEN_APP_TOOL = {
+    "type": "function",
+    "name": OPEN_APP_TOOL_NAME,
+    "description": (
+        "Open any installed desktop app by name (fireox/Chrome/Spotify/VS Code...). "
+        "Use for apps; use open_url for web pages and run_in_terminal for consoles."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string", "description": "The app name, e.g. 'spotify'."},
+        },
+        "required": ["name"],
+    },
+}
+
+CLOSE_WINDOW_TOOL_NAME = "close_window"
+_CLOSE_WINDOW_TOOL = {
+    "type": "function",
+    "name": CLOSE_WINDOW_TOOL_NAME,
+    "description": (
+        "Close a desktop WINDOW by app or title words ('chrome', 'Gmail'). When they "
+        "say 'close this tab' you may close the focused app's window if the browser "
+        "tab itself cannot be targeted."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "target": {"type": "string", "description": "App name or words from the window title."},
+        },
+        "required": ["target"],
+    },
+}
+
+BRING_WINDOW_TOOL_NAME = "bring_window"
+_BRING_WINDOW_TOOL = {
+    "type": "function",
+    "name": BRING_WINDOW_TOOL_NAME,
+    "description": (
+        "Bring an ALREADY-OPEN desktop window to the front - 'bring chrome up', "
+        "'switch to the mail', 'show vscode'. If several windows match (several "
+        "Chrome windows open), it raises the one they used most recently. Use this "
+        "instead of open_app when the app may simply be hidden behind others."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "target": {"type": "string", "description": "App name or words from the window title."},
+        },
+        "required": ["target"],
+    },
+}
+
+SPLIT_SCREEN_TOOL_NAME = "split_screen"
+_SPLIT_SCREEN_TOOL = {
+    "type": "function",
+    "name": SPLIT_SCREEN_TOOL_NAME,
+    "description": (
+        "Tile their open windows across the screen: 'split my screen into four' -> 4 "
+        "(a 2x2 grid), 2 -> two halves, 3 -> three columns, 6 -> a 3x2 grid. Use the "
+        "number they asked for."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "count": {
+                "type": "integer",
+                "description": "How many slots: 2, 3, 4, or 6.",
+            }
+        },
+        "required": ["count"],
+    },
+}
+
+FOCUS_MODE_TOOL_NAME = "focus_mode"
+_FOCUS_MODE_TOOL = {
+    "type": "function",
+    "name": FOCUS_MODE_TOOL_NAME,
+    "description": (
+        "Silence the LAPTOP'S notifications (banners and sounds off) for a work "
+        "session. 'on' enters focus mode, 'off' restores notifications. When the "
+        "user agrees to a focus request at startup, call this with 'on'."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "enabled": {
+                "type": "string",
+                "enum": ["on", "off"],
+                "description": "Whether focus mode should be on.",
+            }
+        },
+        "required": ["enabled"],
+    },
+}
+
+PERFORMANCE_MODE_TOOL_NAME = "performance_mode"
+_PERFORMANCE_MODE_TOOL = {
+    "type": "function",
+    "name": PERFORMANCE_MODE_TOOL_NAME,
+    "description": (
+        "Change the laptop's power profile: 'best performance' -> performance; "
+        "'balanced' -> balanced; battery saving -> power-saver."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "profile": {
+                "type": "string",
+                "enum": ["performance", "balanced", "power-saver"],
+                "description": "The profile they asked for.",
+            }
+        },
+        "required": ["profile"],
+    },
+}
+
+MOVE_ORB_TOOL_NAME = "move_orb"
+_MOVE_ORB_TOOL = {
+    "type": "function",
+    "name": MOVE_ORB_TOOL_NAME,
+    "description": (
+        "Move YOUR OWN floating orb window: 'move to the left side' -> left; spots: "
+        "top_left, top, top_right, left, center, right, bottom_left, bottom, "
+        "bottom_right. Your body moves; do not argue."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "position": {
+                "type": "string",
+                "description": "Where to sit: left, right, center, top_left, bottom_right, ...",
+            }
+        },
+        "required": ["position"],
+    },
+}
+
+PHONE_FOCUS_TOOL_NAME = "phone_focus"
+_PHONE_FOCUS_TOOL = {
+    "type": "function",
+    "name": PHONE_FOCUS_TOOL_NAME,
+    "description": (
+        "Put their PAIRED PHONE in focus mode (or release it). Works only when a "
+        "phone is paired via the LAN shortcut; the phone fetches the command on its "
+        "next poll. Say honestly that the phone applies it at its next check."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "enabled": {
+                "type": "string",
+                "enum": ["on", "off"],
+                "description": "Whether the phone should enter focus mode.",
+            }
+        },
+        "required": ["enabled"],
+    },
+}
+
 
 @dataclass(frozen=True, slots=True)
 class RealtimeSessionOptions:
@@ -302,6 +475,9 @@ class RealtimeSessionOptions:
     browser_enabled: bool = False
     shell_enabled: bool = False
     face_enabled: bool = False
+    orb_enabled: bool = False
+    system_tools_enabled: bool = False
+    devices_enabled: bool = False
 
     @classmethod
     def from_settings(cls, settings: Settings) -> RealtimeSessionOptions:
@@ -314,6 +490,9 @@ class RealtimeSessionOptions:
             browser_enabled=settings.browser_enabled,
             shell_enabled=settings.shell_enabled,
             face_enabled=settings.face_enabled,
+            orb_enabled=settings.orb_enabled,
+            system_tools_enabled=settings.system_tools_enabled,
+            devices_enabled=settings.devices_enabled,
         )
 
     def tool_specs(self) -> list[dict[str, Any]]:
@@ -334,6 +513,22 @@ class RealtimeSessionOptions:
             tools.extend([_OPEN_URL_TOOL, _WEB_SEARCH_TOOL])
         if self.face_enabled:
             tools.append(_SET_FEELING_TOOL)
+        if self.system_tools_enabled:
+            tools.extend(
+                [
+                    _SYSTEM_STATUS_TOOL,
+                    _OPEN_APP_TOOL,
+                    _CLOSE_WINDOW_TOOL,
+                    _BRING_WINDOW_TOOL,
+                    _SPLIT_SCREEN_TOOL,
+                    _FOCUS_MODE_TOOL,
+                    _PERFORMANCE_MODE_TOOL,
+                ]
+            )
+        if self.orb_enabled:
+            tools.append(_MOVE_ORB_TOOL)
+        if self.devices_enabled:
+            tools.append(_PHONE_FOCUS_TOOL)
         if self.shell_enabled:
             tools.extend(
                 [

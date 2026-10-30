@@ -72,8 +72,10 @@ class Settings:
     vision_enabled: bool = True
     camera_device_index: int = 0
     vision_image_max_width: int = 768
-    screen_enabled: bool = False
+    screen_enabled: bool = True
     screen_max_width: int = 1280
+    # Speaker volume trim: multiplies Kayla's output audio before the limiter.
+    speaker_gain: float = 0.8
     browser_enabled: bool = True
     shell_enabled: bool = False
     shell_timeout_seconds: int = 20
@@ -85,6 +87,19 @@ class Settings:
     face_port: int = 8765
     face_autostart: bool = True
     face_fullscreen: bool = True
+    face_window_width: int = 480
+    face_window_height: int = 320
+    orb_enabled: bool = True
+    orb_host: str = "127.0.0.1"
+    orb_port: int = 8766
+    orb_autostart: bool = True
+    orb_window_width: int = 420
+    orb_window_height: int = 260
+    orb_opacity: float = 0.96
+    system_tools_enabled: bool = True
+    devices_enabled: bool = True
+    devices_bridge_port: int = 8711
+    devices_path: str = "kayla_devices.json"
     memory_enabled: bool = True
     memory_auto_capture: bool = True
     memory_path: str = "kayla_memory.json"
@@ -164,9 +179,10 @@ class Settings:
         camera_device_text = values.get("KAYLA_CAMERA_DEVICE", "0").strip()
         vision_max_width_text = values.get("KAYLA_VISION_MAX_WIDTH", "768").strip()
         screen_enabled = _parse_bool(
-            values.get("KAYLA_SCREEN_ENABLED", "false"), "KAYLA_SCREEN_ENABLED"
+            values.get("KAYLA_SCREEN_ENABLED", "true"), "KAYLA_SCREEN_ENABLED"
         )
         screen_max_width_text = values.get("KAYLA_SCREEN_MAX_WIDTH", "1280").strip()
+        speaker_gain_text = values.get("KAYLA_SPEAKER_GAIN", "0.8").strip()
         browser_enabled = _parse_bool(
             values.get("KAYLA_BROWSER_ENABLED", "true"), "KAYLA_BROWSER_ENABLED"
         )
@@ -187,6 +203,27 @@ class Settings:
         )  # noqa: E501
         face_fullscreen = _parse_bool(
             values.get("KAYLA_FACE_FULLSCREEN", "true"), "KAYLA_FACE_FULLSCREEN"
+        )
+        face_window_width_text = values.get("KAYLA_FACE_WIDTH", "480").strip()
+        face_window_height_text = values.get("KAYLA_FACE_HEIGHT", "320").strip()
+        orb_enabled = _parse_bool(values.get("KAYLA_ORB_ENABLED", "true"), "KAYLA_ORB_ENABLED")
+        orb_host = values.get("KAYLA_ORB_HOST", "127.0.0.1").strip() or "127.0.0.1"
+        orb_port_text = values.get("KAYLA_ORB_PORT", "8766").strip()
+        orb_autostart = _parse_bool(
+            values.get("KAYLA_ORB_AUTOSTART", "true"), "KAYLA_ORB_AUTOSTART"
+        )  # noqa: E501
+        orb_window_width_text = values.get("KAYLA_ORB_WIDTH", "420").strip()
+        orb_window_height_text = values.get("KAYLA_ORB_HEIGHT", "260").strip()
+        orb_opacity_text = values.get("KAYLA_ORB_OPACITY", "0.96").strip()
+        system_tools_enabled = _parse_bool(
+            values.get("KAYLA_SYSTEM_TOOLS_ENABLED", "true"), "KAYLA_SYSTEM_TOOLS_ENABLED"
+        )  # noqa: E501
+        devices_enabled = _parse_bool(
+            values.get("KAYLA_DEVICES_ENABLED", "true"), "KAYLA_DEVICES_ENABLED"
+        )  # noqa: E501
+        devices_bridge_port_text = values.get("KAYLA_DEVICES_PORT", "8711").strip()
+        devices_path = (
+            values.get("KAYLA_DEVICES_PATH", "kayla_devices.json").strip() or "kayla_devices.json"
         )
         memory_enabled = _parse_bool(
             values.get("KAYLA_MEMORY_ENABLED", "true"), "KAYLA_MEMORY_ENABLED"
@@ -221,6 +258,51 @@ class Settings:
             face_port = int(face_port_text)
         except ValueError as error:
             raise ConfigurationError("KAYLA_FACE_PORT must be an integer.") from error
+
+        try:
+            orb_port = int(orb_port_text)
+        except ValueError as error:
+            raise ConfigurationError("KAYLA_ORB_PORT must be an integer.") from error
+
+        try:
+            orb_window_width = int(orb_window_width_text)
+        except ValueError as error:
+            raise ConfigurationError("KAYLA_ORB_WIDTH must be an integer.") from error
+        if orb_window_width <= 0:
+            raise ConfigurationError("KAYLA_ORB_WIDTH must be positive.")
+
+        try:
+            orb_window_height = int(orb_window_height_text)
+        except ValueError as error:
+            raise ConfigurationError("KAYLA_ORB_HEIGHT must be an integer.") from error
+        if orb_window_height <= 0:
+            raise ConfigurationError("KAYLA_ORB_HEIGHT must be positive.")
+
+        try:
+            orb_opacity = float(orb_opacity_text)
+        except ValueError as error:
+            raise ConfigurationError("KAYLA_ORB_OPACITY must be a number.") from error
+        if not 0.2 <= orb_opacity <= 1.0:
+            raise ConfigurationError("KAYLA_ORB_OPACITY must be between 0.2 and 1.0.")
+
+        try:
+            devices_bridge_port = int(devices_bridge_port_text)
+        except ValueError as error:
+            raise ConfigurationError("KAYLA_DEVICES_PORT must be an integer.") from error
+
+        try:
+            face_window_width = int(face_window_width_text)
+        except ValueError as error:
+            raise ConfigurationError("KAYLA_FACE_WIDTH must be an integer.") from error
+        if face_window_width <= 0:
+            raise ConfigurationError("KAYLA_FACE_WIDTH must be positive.")
+
+        try:
+            face_window_height = int(face_window_height_text)
+        except ValueError as error:
+            raise ConfigurationError("KAYLA_FACE_HEIGHT must be an integer.") from error
+        if face_window_height <= 0:
+            raise ConfigurationError("KAYLA_FACE_HEIGHT must be positive.")
 
         try:
             sample_rate = int(sample_rate_text)
@@ -282,6 +364,13 @@ class Settings:
             raise ConfigurationError("KAYLA_SCREEN_MAX_WIDTH must be positive.")
 
         try:
+            speaker_gain = float(speaker_gain_text)
+        except ValueError as error:
+            raise ConfigurationError("KAYLA_SPEAKER_GAIN must be a number.") from error
+        if not 0.05 <= speaker_gain <= 2.0:
+            raise ConfigurationError("KAYLA_SPEAKER_GAIN must be between 0.05 and 2.0.")
+
+        try:
             shell_timeout_seconds = int(shell_timeout_text)
         except ValueError as error:
             raise ConfigurationError("KAYLA_SHELL_TIMEOUT_SECONDS must be an integer.") from error
@@ -332,6 +421,7 @@ class Settings:
             vision_image_max_width=vision_image_max_width,
             screen_enabled=screen_enabled,
             screen_max_width=screen_max_width,
+            speaker_gain=speaker_gain,
             browser_enabled=browser_enabled,
             shell_enabled=shell_enabled,
             shell_timeout_seconds=shell_timeout_seconds,
@@ -343,6 +433,19 @@ class Settings:
             face_port=face_port,
             face_autostart=face_autostart,
             face_fullscreen=face_fullscreen,
+            face_window_width=face_window_width,
+            face_window_height=face_window_height,
+            orb_enabled=orb_enabled,
+            orb_host=orb_host,
+            orb_port=orb_port,
+            orb_autostart=orb_autostart,
+            orb_window_width=orb_window_width,
+            orb_window_height=orb_window_height,
+            orb_opacity=orb_opacity,
+            system_tools_enabled=system_tools_enabled,
+            devices_enabled=devices_enabled,
+            devices_bridge_port=devices_bridge_port,
+            devices_path=devices_path,
             memory_enabled=memory_enabled,
             memory_auto_capture=memory_auto_capture,
             memory_path=memory_path,

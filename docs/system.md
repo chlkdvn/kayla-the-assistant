@@ -406,3 +406,83 @@ with `KAYLA_SHELL_BLOCK_DANGEROUS=false`.
 - `system/launcher.py` — `TerminalLauncher`: detached commands in a new terminal.
 - `system/shell.py` — `ShellRunner.run` + `is_dangerous` tripwire.
 - Tools wired in `realtime/options.py`; handlers in `realtime/gemini_session.py`.
+
+## 7. Laptop awareness and control (new tools)
+
+Everything below ships **enabled together** with `KAYLA_SYSTEM_TOOLS_ENABLED`
+(default *true*; the orb and phone bridge have their own flags and docs). These
+tools make Kayla an owner of the whole laptop, not just pages and terminals.
+
+### system_status — "Kayla, what's using my memory?"
+
+`system/monitor.py` (`SystemMonitor.describe`) reads the **real** state:
+RAM used/total/percent, CPU percent, load, battery presence and level/charging,
+plus every app with an open window (via `wmctrl -l -x`, sticky panel/dock
+windows shown or skipped depending on desktop). The instructions forbid Kayla
+from guessing these numbers: she must call the tool.
+
+### open_app — "open spotify"
+
+`system/apps.py` (`DesktopApps.open`) launches any installed desktop app by
+fuzzy name — it scans the application registry (`gsettings`-compatible .desktop
+files via `gio`/`gtk-launch`, XDG data dirs) and launches through the desktop
+launcher, so apps start exactly like clicking the icon. Distinct from
+`open_url` (web pages) and `run_in_terminal` (a visible console app).
+
+### close_window — "close chrome"
+
+`system/windowctl.py` (`WindowControl.close`) closes desktop **windows** by app
+name or title words using `wmctrl -ic`-style graceful close (like clicking X;
+apps get a chance to save). `activate` raises a window instead. Honest limits:
+browser *tab* level cannot be targeted — closing an app closes its window(s).
+
+### bring_window — "bring chrome up"
+
+`WindowControl.activate` raises an **already-open** window instead of launching
+anything new: it matches app words against desktop windows in real stacking
+order (`parse_stacking`, most recently used first), so "bring chrome up" raises
+your last-used Chrome window, not a fresh one. The instructions tell Kayla to
+fall back to `open_app` only when nothing at all was open — and to say so
+plainly.
+
+### split_screen — "split my screen to four"
+
+`system/tiler.py` (`WindowTiler.split`) tiles visible app windows on the work
+area (from `wmctrl -d`) into **2** halves, **3** columns, **4** (2x2 grid) or
+**6** (3x2 grid), each window re-focused after being placed. Windows count is
+clamped to the layout;sticky panels are skipped and Kayla's own orb window is
+ignored (it is never grabbed nor repositioned). The work area is the *real*
+one: `wmctrl -lG` prints doubled x/y coordinates on some machines (this
+notebook included), so slots, snapping, and tiling only ever trust `wmctrl -d`
+or the ctypes probe in `orb/x11drag.py`.
+
+### focus_mode — "turn off my notifications"
+
+`system/focus.py` (`FocusMode.on/off`) silences GNOME's interruptions via
+`gsettings` (banners + sounds of Notification section), with quick-toggles off
+for a work session. `off` restores the original values (it remembers what it
+changed).
+
+### performance_mode — "best performance settings"
+
+`system/performance.py` (`PerformanceMode.set`) switches the system power
+profile through `powerprofilesctl` (GNOME perf panel is its source of truth):
+`performance`, `balanced`, `power-saver`. Unavailable profile answers plainly.
+
+### move_orb — "move to the left side of my laptop"
+
+Moves her own floating orb window among named slots; see [the orb guide](orb.md).
+
+### phone_focus — "phone in focus mode"
+
+Queues focus on/off for the paired phone over the LAN bridge; the phone applies
+it at its next shortcut poll. See [the phone guide](devices.md).
+
+### Dependencies and honesty
+
+- `psutil` (RAM/CPU/battery), `wmctrl` (windows/tiling; X11 desktops), GNOME
+  `gsettings` + `powerprofilesctl` for the laptop settings.
+- A missing helper **never breaks the chat**: each tool returns a spoken "X
+  needs wmctrl / isn't installed" sentence instead, and the model relays it.
+- The tool list is gated: turn `KAYLA_SYSTEM_TOOLS_ENABLED=false` in `.env` to
+  remove the whole machine-ownership layer at once.

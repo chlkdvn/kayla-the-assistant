@@ -178,6 +178,37 @@ def test_settings_vision_can_be_disabled() -> None:
     assert settings.vision_enabled is False
 
 
+def test_settings_screen_vision_defaults_on() -> None:
+    # "Can you see my screen?" should just work; she reads the desktop on ask.
+    settings = Settings.from_mapping({"GROQ_API_KEY": "test-key"})
+
+    assert settings.screen_enabled is True
+
+
+def test_settings_screen_vision_can_be_disabled() -> None:
+    settings = Settings.from_mapping({"GROQ_API_KEY": "test-key", "KAYLA_SCREEN_ENABLED": "false"})
+
+    assert settings.screen_enabled is False
+
+
+def test_settings_speaker_gain_defaults_to_trimmed() -> None:
+    settings = Settings.from_mapping({"GROQ_API_KEY": "test-key"})
+
+    assert settings.speaker_gain == pytest.approx(0.8)
+
+
+def test_settings_speaker_gain_can_be_overridden() -> None:
+    settings = Settings.from_mapping({"GROQ_API_KEY": "test-key", "KAYLA_SPEAKER_GAIN": "1.5"})
+
+    assert settings.speaker_gain == pytest.approx(1.5)
+
+
+def test_settings_reject_an_unusable_speaker_gain() -> None:
+    for env in ({"KAYLA_SPEAKER_GAIN": "loud"}, {"KAYLA_SPEAKER_GAIN": "0.01"}):
+        with pytest.raises(ConfigurationError, match="SPEAKER_GAIN"):
+            Settings.from_mapping({"GROQ_API_KEY": "test-key", **env})
+
+
 def test_settings_reject_a_non_integer_camera_device() -> None:
     with pytest.raises(ConfigurationError, match="CAMERA_DEVICE"):
         Settings.from_mapping({"GROQ_API_KEY": "test-key", "KAYLA_CAMERA_DEVICE": "front"})
@@ -235,3 +266,70 @@ def test_settings_reject_a_negative_auto_sleep() -> None:
 def test_settings_reject_an_unparsable_auto_sleep() -> None:
     with pytest.raises(ConfigurationError, match="AUTO_SLEEP"):
         Settings.from_mapping({"GROQ_API_KEY": "test-key", "KAYLA_WAKE_AUTO_SLEEP_SECONDS": "soon"})
+
+
+def test_settings_laptop_control_defaults_all_on() -> None:
+    # New ownership: laptop awareness, the floating orb, and the phone bridge
+    # are the product's heart, so they default on.
+    settings = Settings.from_mapping({"GROQ_API_KEY": "test-key"})
+
+    assert settings.system_tools_enabled is True
+    assert settings.orb_enabled is True
+    assert settings.orb_host == "127.0.0.1"
+    assert settings.orb_port == 8766
+    assert settings.orb_autostart is True
+    assert settings.orb_window_width == 420
+    assert settings.orb_window_height == 260
+    assert settings.orb_opacity == pytest.approx(0.96)
+    assert settings.devices_enabled is True
+    assert settings.devices_bridge_port == 8711
+    assert settings.devices_path == "kayla_devices.json"
+
+
+def test_settings_laptop_control_flags_can_be_disabled() -> None:
+    settings = Settings.from_mapping(
+        {
+            "GROQ_API_KEY": "test-key",
+            "KAYLA_SYSTEM_TOOLS_ENABLED": "false",
+            "KAYLA_ORB_ENABLED": "false",
+            "KAYLA_DEVICES_ENABLED": "false",
+        }
+    )
+
+    assert settings.system_tools_enabled is False
+    assert settings.orb_enabled is False
+    assert settings.devices_enabled is False
+
+
+def test_settings_orb_values_can_be_overridden() -> None:
+    settings = Settings.from_mapping(
+        {
+            "GROQ_API_KEY": "test-key",
+            "KAYLA_ORB_PORT": "9001",
+            "KAYLA_ORB_WIDTH": "300",
+            "KAYLA_ORB_HEIGHT": "180",
+            "KAYLA_ORB_OPACITY": "0.5",
+            "KAYLA_DEVICES_PORT": "9002",
+            "KAYLA_DEVICES_PATH": "phones.json",
+        }
+    )
+
+    assert settings.orb_port == 9001
+    assert settings.orb_window_width == 300
+    assert settings.orb_window_height == 180
+    assert settings.orb_opacity == pytest.approx(0.5)
+    assert settings.devices_bridge_port == 9002
+    assert settings.devices_path == "phones.json"
+
+
+def test_settings_reject_bad_orb_numbers() -> None:
+    for env, match in (
+        ({"KAYLA_ORB_PORT": "orb"}, "ORB_PORT"),
+        ({"KAYLA_ORB_WIDTH": "-3"}, "ORB_WIDTH"),
+        ({"KAYLA_ORB_HEIGHT": "zero"}, "ORB_HEIGHT"),
+        ({"KAYLA_ORB_OPACITY": "mist"}, "ORB_OPACITY"),
+        ({"KAYLA_ORB_OPACITY": "0.1"}, "ORB_OPACITY"),  # below the 0.2 floor
+        ({"KAYLA_DEVICES_PORT": "wifi"}, "DEVICES_PORT"),
+    ):
+        with pytest.raises(ConfigurationError, match=match):
+            Settings.from_mapping({"GROQ_API_KEY": "test-key", **env})

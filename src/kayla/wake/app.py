@@ -271,33 +271,14 @@ class _FaceMoodController:
 
 
 def _open_face(settings: Settings) -> tuple[Any, Any]:
-    """Open the on-screen face (optionally launching its window), or (None, None)."""
-    if not settings.face_enabled:
-        return None, None
-    import subprocess
-    import sys
+    """Open her on-screen presence: the orb when enabled, the face otherwise."""
+    if settings.orb_enabled:
+        from kayla.orb.window import open_orb_window
 
-    from kayla.face.client import ScreenFace
+        return open_orb_window(settings)
+    from kayla.face.window import open_face_window
 
-    proc = None
-    if settings.face_autostart:
-        try:
-            command = [
-                sys.executable,
-                "-m",
-                "kayla.face.app",
-                "--host",
-                settings.face_host,
-                "--port",
-                str(settings.face_port),
-            ]
-            if settings.face_fullscreen:
-                command.append("--fullscreen")
-            proc = subprocess.Popen(command)
-            print("Face: opening the on-screen face window.")
-        except Exception as error:  # noqa: BLE001 - the face is optional; degrade gracefully
-            print(f"Face: couldn't open the window ({error}); you can run 'kayla-face' yourself.")
-    return ScreenFace(settings.face_host, settings.face_port), proc
+    return open_face_window(settings)
 
 
 async def run_realtime_with_gate(settings: Settings, *, poll_interval: float = 0.5) -> None:

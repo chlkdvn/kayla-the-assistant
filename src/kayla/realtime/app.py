@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from kayla.config.settings import ConfigurationError, Settings
@@ -37,6 +38,7 @@ def build_realtime_session(
     speaker = StreamingSpeaker(
         sample_rate=GEMINI_OUTPUT_RATE,
         device=settings.audio_output_device,
+        gain=settings.speaker_gain,
     )
     camera = None
     if settings.vision_enabled:
@@ -54,10 +56,15 @@ def build_realtime_session(
     memory = None
     if settings.memory_enabled:
         # Embedding runs locally (fastembed); degrade to no memory if the model
-        # cannot load rather than failing to start.
+        # cannot load rather than failing to start. The first-ever run has to
+        # fetch the model once - say so up front, because on a phone tether
+        # that takes minutes and silence would look like a frozen session.
+        print(
+            "Preparing long-term memory "
+            f"({settings.embedding_model}); first run downloads it once - "
+            "skip with KAYLA_MEMORY_ENABLED=false."
+        )
         try:
-            from pathlib import Path
-
             from kayla.memory.fastembed_embedder import FastEmbedEmbedder
             from kayla.memory.store import MemoryStore
 
@@ -74,6 +81,45 @@ def build_realtime_session(
         from kayla.system.browser import Browser
 
         browser = Browser()
+    monitor = apps = windows = tiler = focus_mode = performance_mode = devices = None
+    if settings.system_tools_enabled:
+        from kayla.system.apps import DesktopApps
+        from kayla.system.focus import FocusMode
+        from kayla.system.monitor import SystemMonitor
+        from kayla.system.performance import PerformanceMode
+        from kayla.system.tiler import WindowTiler
+        from kayla.system.windowctl import WindowControl
+
+        try:
+            monitor = SystemMonitor()
+        except Exception as error:  # noqa: BLE001 - monitoring is optional
+            print(f"Laptop monitoring is off ({error}).")
+        apps = DesktopApps()
+        windows = WindowControl()
+        tiler = WindowTiler()
+        focus_mode = FocusMode()
+        performance_mode = PerformanceMode()
+    pairing_banner: list[str] = []  # filled by the bridge callback when it starts
+    if settings.devices_enabled:
+        from kayla.devices.bridge import DeviceBridge, start_bridge
+
+        bridge = DeviceBridge(path=Path(settings.devices_path))
+
+        def _announce_bridge(address: str) -> None:
+            code = bridge.pair_code()
+            print(
+                "Phone bridge: "
+                f"{address} - pair your iPhone with the shortcut (code {code}); "
+                "see docs/devices.md."
+            )
+            pairing_banner.append(f"Phone bridge is up; pair code {code}")
+
+        start_bridge(
+            bridge,
+            port=settings.devices_bridge_port,
+            on_ready=_announce_bridge,
+        )
+        devices = bridge
     shell = None
     launcher = None
     keyboard = None
@@ -91,6 +137,18 @@ def build_realtime_session(
             block_dangerous=settings.shell_block_dangerous,
         )
         keyboard = Keyboard(tool=settings.keyboard_tool)
+    if face is None:
+        # No window was handed in: open the orb (or the classic face) here.
+        if settings.orb_enabled:
+            from kayla.orb.window import open_orb_window
+
+            face, _orb_process = open_orb_window(settings)
+        elif settings.face_enabled:
+            from kayla.face.window import open_face_window
+
+            face, _face_process = open_face_window(settings)
+    if pairing_banner and face is not None and hasattr(face, "message"):
+        face.message(pairing_banner[0])  # the pair code is right on her band
     echo_canceller = None
     if settings.realtime_echo_cancel:
         from kayla.realtime.echo_cancel import PulseEchoCanceller
@@ -117,6 +175,13 @@ def build_realtime_session(
         keyboard=keyboard,
         echo_canceller=echo_canceller,
         face=face,
+        monitor=monitor,
+        apps=apps,
+        windows=windows,
+        tiler=tiler,
+        focus_mode=focus_mode,
+        performance_mode=performance_mode,
+        devices=devices,
     )
     from kayla.realtime.gemini_session import GeminiVoiceSession
 

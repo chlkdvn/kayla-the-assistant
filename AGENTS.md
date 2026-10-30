@@ -26,11 +26,33 @@ control, and an animated on-screen face.
 - `ai/`: provider interfaces and the Groq chat implementation only.
 - `conversation/`: provider-independent conversation state and orchestration.
 - `prompts/`: version-controlled instructions that shape Kayla's behavior.
-- `interfaces/`: ways a human interacts with Kayla, beginning with the terminal.
-- `voice/`: microphone and speaker concerns when voice is introduced.
+- `interfaces/`: ways a human interacts with Kayla: the pop-out front door
+  (`cli.py`, spawns the detached orb session and closes the calling terminal),
+  the wake gate, and the voice CLIs. Typed chat remains `cli.run_chat` behind
+  `kayla --chat`.
+- `orb/`: the floating 3D orb — state math, renderer, window process (drag,
+  snap, chip questions, line protocol on port 8766), client, and the shared
+  `open_orb_window`. Window actions happen only on the window thread via
+  queued moves. Dragging is handed to the window manager on X11
+  (`orb/x11drag.py`, `_NET_WM_MOVERESIZE`) with a pure-math fallback, so the
+  borderless window never buzzes; she is born borderless and auto-fits and
+  clamps into the work area. It replaces the face in realtime mode.
+- `face/`: the earlier 2D keyboard-free face window; untouched, kept working.
+- `voice/`: microphone and speaker concerns for the chained voice path.
 - `memory/`: local vector memory store and the local embedding model.
-- `realtime/`: continuous PCM streaming, Gemini Live session state, and
-  interruption handling. Keep it independent from the chained `voice/` fallback.
+- `realtime/`: continuous PCM streaming (with speaker loudness taming:
+  soft knee, ceiling, and `speaker_gain`), Gemini Live session state, tool
+  catalogue (`options.py`), behaviour modes, and interruption handling. Keep it
+  independent from the chained `voice/` fallback.
+- `system/`: operating-system adapters: browser, shell, keyboard, launcher,
+  plus laptop awareness and control (`monitor`, `apps`, `windowctl`, `tiler`,
+  `focus`, `performance`) and `session_exit` (terminal self-close for the
+  pop-out). Runner-injected for offline tests.
+- `devices/`: the LAN bridge to a paired phone (pairing, command queue, acks,
+  notes). The phone performs Focus changes itself at its next poll; Kayla only
+  queues the demand.
+- `setup/`: the setup wizard and the boot autostart installer (`boot.py`:
+  systemd user unit + desktop entry, runner-injected).
 
 ## Secrets
 
